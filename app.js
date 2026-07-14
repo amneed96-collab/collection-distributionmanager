@@ -35,14 +35,14 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 function seedData() {
   const companies = [{ id: "co1", name: "Ananya Publications" }, { id: "co2", name: "Kakoli Prokashoni" }, { id: "co3", name: "Somoy Prokashon" }];
   const customers = [
-    { id: "c1", name: "Karim Traders", phone: "01711-000111", address: "22 Mirpur Rd, Dhaka", area: "North Zone", type: "Wholesaler", opening: 5000 },
-    { id: "c2", name: "Rahman General Store", phone: "01822-000222", address: "8 Jatrabari, Dhaka", area: "East Zone", type: "Retailer", opening: 0 },
+    { id: "c1", name: "Karim Traders", phone: "01711-000111", address: "22 Mirpur Rd, Dhaka", area: "Feni Sadar", type: "Wholesaler", opening: 5000 },
+    { id: "c2", name: "Rahman General Store", phone: "01822-000222", address: "8 Jatrabari, Dhaka", area: "Sonagazi", type: "Retailer", opening: 0 },
   ];
   const products = [
     { id: "p1", name: "Bangla Shahitto Songroho", companyId: "co1", unit: "pcs", price: 350, stock: 120 },
     { id: "p2", name: "General Knowledge 2026", companyId: "co1", unit: "pcs", price: 280, stock: 85 },
   ];
-  const reps = [{ id: "r1", name: "Jahangir Alam", phone: "01711-111000", area: "North Zone" }];
+  const reps = [{ id: "r1", name: "Jahangir Alam", phone: "01711-111000", area: "Feni Sadar" }];
   return { companies, customers, products, reps, collections: [], deliveries: [], distributions: [] };
 }
 
