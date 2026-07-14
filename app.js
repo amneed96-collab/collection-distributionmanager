@@ -9,7 +9,7 @@ let SIDEBAR_OPEN = false;
 const CUSTOMER_TYPES = ["Retailer", "Wholesaler", "Distributor"];
 const PRODUCT_UNITS = ["pcs", "set", "box", "carton"];
 const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Mobile Banking", "Cheque"];
-const AREAS = ["Feni Sadar", "Sonagazi", "Daganbhuiyan", "Chhagalnaiya","Fullgazi", "Parashuram" ];
+const AREAS = ["Feni Sadar", "Sonagazi", "Daganbhuiyan", "Chhagalnaiya", "Fulgazi", "Parshuram", "Sitakunda", "Noakhali", "Maijdee", "Senbagh", "Chowmuhani"];
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", num: "01" },
@@ -25,6 +25,26 @@ const NAV = [
 /* ---------------------------------- helpers ---------------------------------- */
 const genId = (p) => p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const todayStr = () => new Date().toISOString().slice(0, 10);
+// Normalizes any date value (JS Date, ISO datetime string, or plain YYYY-MM-DD) to "YYYY-MM-DD".
+// Google Sheets returns dates as full datetime strings/objects, which broke exact string
+// comparisons in the Report view (Daily/Monthly always showed 00). This guarantees a
+// consistent plain date string everywhere in the app.
+function normDate(d) {
+  if (!d) return "";
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return String(d).slice(0, 10);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function normalizeAllDates(data) {
+  (data.collections || []).forEach((r) => (r.date = normDate(r.date)));
+  (data.deliveries || []).forEach((r) => (r.date = normDate(r.date)));
+  (data.distributions || []).forEach((r) => (r.date = normDate(r.date)));
+  return data;
+}
 const fmtMoney = (n) => "৳" + (Number(n) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (d) => (!d ? "-" : new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }));
 const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" }); };
@@ -35,12 +55,12 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 function seedData() {
   const companies = [{ id: "co1", name: "Ananya Publications" }, { id: "co2", name: "Kakoli Prokashoni" }, { id: "co3", name: "Somoy Prokashon" }];
   const customers = [
-    { id: "c1", name: "Karim Traders", phone: "01711-000111", address: "22 Mirpur Rd, Dhaka", area: "Feni Sadar", type: "Wholesaler", opening: 5000 },
-    { id: "c2", name: "Rahman General Store", phone: "01822-000222", address: "8 Jatrabari, Dhaka", area: "Sonagazi", type: "Retailer", opening: 0 },
+    { id: "c1", name: "Karim Traders", phone: "01711-000111", address: "Feni Sadar", area: "Feni Sadar", type: "Wholesaler", opening: 5000 },
+    { id: "c2", name: "Rahman General Store", phone: "01822-000222", address: "Chowmuhani", area: "Chowmuhani", type: "Retailer", opening: 0 },
   ];
   const products = [
-    { id: "p1", name: "Bangla Shahitto Songroho", companyId: "co1", unit: "pcs", price: 350, stock: 120 },
-    { id: "p2", name: "General Knowledge 2026", companyId: "co1", unit: "pcs", price: 280, stock: 85 },
+    { id: "p1", name: "Bangla Shahitto Songroho", companyId: "co1", unit: "pcs", purchasePrice: 280, commissionPct: 25, price: 350, stock: 120 },
+    { id: "p2", name: "General Knowledge 2026", companyId: "co1", unit: "pcs", purchasePrice: 224, commissionPct: 25, price: 280, stock: 85 },
   ];
   const reps = [{ id: "r1", name: "Jahangir Alam", phone: "01711-111000", area: "Feni Sadar" }];
   return { companies, customers, products, reps, collections: [], deliveries: [], distributions: [] };
@@ -184,7 +204,7 @@ function viewCustomers() {
     <div class="panel">
       ${printHeader("Customer List", "Collection & Distribution Manager")}
       <table class="data-table" id="customersTable">
-        <thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Area</th><th>Balance</th><th class="no-print"></th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Area</th><th>Balance</th><th></th></tr></thead>
         <tbody>
           ${DATA.customers.length === 0 ? `<tr><td colspan="6"><div class="empty-state">কোনো কাস্টমার নেই।</div></td></tr>` :
             DATA.customers.map((c) => `
@@ -194,7 +214,7 @@ function viewCustomers() {
                 <td><span class="badge">${esc(c.type)}</span></td>
                 <td>${esc(c.area)}</td>
                 <td class="mono-num ${(bal[c.id] || 0) > 0 ? "tone-danger-text" : "tone-success-text"}">${fmtMoney(bal[c.id] || 0)}</td>
-                <td class="no-print"><button class="icon-btn" onclick="openCustomerModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCustomer('${c.id}')">🗑️</button></td>
+                <td><button class="icon-btn" onclick="openCustomerModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCustomer('${c.id}')">🗑️</button></td>
               </tr>`).join("")}
         </tbody>
       </table>
@@ -234,21 +254,24 @@ function viewProducts() {
   return `
     <div class="toolbar">
       <div class="search-box">🔍 <input placeholder="খুঁজুন..." oninput="filterTable('productsTable', this.value)"></div>
-      <div><button class="btn-ghost" onclick="openCompanyModal()">+ Add Company</button> <button class="btn-primary" onclick="openProductModal()" ${!DATA.companies.length ? "disabled" : ""}>+ Add Product</button></div>
+      <div><button class="btn-ghost" onclick="openCompanyModal()">+ Add Company</button> <button class="btn-primary" onclick="openProductModal()" ${!DATA.companies.length ? "disabled" : ""}>+ Add Product</button> ${printButton("Print Product List")}</div>
     </div>
     <div class="panel">
+      ${printHeader("Product List", "Collection & Distribution Manager")}
       <table class="data-table" id="productsTable">
-        <thead><tr><th>Product</th><th>Company</th><th>Unit</th><th>Price</th><th>Stock</th><th></th></tr></thead>
+        <thead><tr><th>Product</th><th>Company</th><th>Unit</th><th>Purchase</th><th>Commission</th><th>Sale Price</th><th>Stock</th><th class="no-print"></th></tr></thead>
         <tbody>
-          ${DATA.products.length === 0 ? `<tr><td colspan="6"><div class="empty-state">কোনো প্রোডাক্ট নেই।</div></td></tr>` :
+          ${DATA.products.length === 0 ? `<tr><td colspan="8"><div class="empty-state">কোনো প্রোডাক্ট নেই।</div></td></tr>` :
             DATA.products.map((p) => `
               <tr>
                 <td><strong>${esc(p.name)}</strong></td>
                 <td><span class="badge">${esc(idToName(DATA.companies, p.companyId))}</span></td>
                 <td>${esc(p.unit)}</td>
-                <td class="mono-num">${fmtMoney(p.price)}</td>
+                <td class="mono-num">${fmtMoney(p.purchasePrice || 0)}</td>
+                <td class="mono-num tone-gold-text">${(p.commissionPct || 0)}%</td>
+                <td class="mono-num tone-success-text">${fmtMoney(p.price)}</td>
                 <td class="mono-num ${p.stock < 15 ? "tone-danger-text" : ""}">${p.stock}</td>
-                <td><button class="icon-btn" onclick="openProductModal('${p.id}')">✏️</button><button class="icon-btn" onclick="deleteProduct('${p.id}')">🗑️</button></td>
+                <td class="no-print"><button class="icon-btn" onclick="openProductModal('${p.id}')">✏️</button><button class="icon-btn" onclick="deleteProduct('${p.id}')">🗑️</button></td>
               </tr>`).join("")}
         </tbody>
       </table>
@@ -278,20 +301,38 @@ function deleteCompany(id) {
   DATA.companies = DATA.companies.filter((x) => x.id !== id);
   persist();
 }
+function computeSalePrice() {
+  const purchase = Number(val("f_ppurchase")) || 0;
+  const pct = Number(val("f_pcommission")) || 0;
+  const sale = purchase + (purchase * pct) / 100;
+  const el = document.getElementById("f_psaleprice");
+  if (el) el.textContent = fmtMoney(sale);
+}
 function openProductModal(id) {
   const p = id ? DATA.products.find((x) => x.id === id) : null;
+  const purchase = p ? (p.purchasePrice || 0) : "";
+  const pct = p ? (p.commissionPct || 0) : "";
+  const initialSale = p ? fmtMoney(p.price || 0) : fmtMoney(0);
   openModal(`${p ? "Edit" : "Add"} Product`, `
     <div class="modal-body">
       <label class="field-label">Name</label><input class="field-input" id="f_pname" value="${esc(p ? p.name : "")}">
       <label class="field-label" style="margin-top:10px;">Company</label><select class="field-input" id="f_pcompany">${DATA.companies.map((c) => `<option value="${c.id}" ${p && p.companyId === c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
       <label class="field-label" style="margin-top:10px;">Unit</label><select class="field-input" id="f_punit">${PRODUCT_UNITS.map((u) => `<option ${p && p.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select>
-      <label class="field-label" style="margin-top:10px;">Price</label><input class="field-input" type="number" id="f_pprice" value="${p ? p.price : ""}">
+      <label class="field-label" style="margin-top:10px;">Purchase Price</label><input class="field-input" type="number" id="f_ppurchase" value="${purchase}" oninput="computeSalePrice()">
+      <label class="field-label" style="margin-top:10px;">Commission (%)</label><input class="field-input" type="number" id="f_pcommission" value="${pct}" oninput="computeSalePrice()">
+      <div style="margin-top:10px;padding:10px 12px;background:#FAFBFC;border:1px solid var(--border);border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--muted);">Sale Price (Purchase + Commission)</span>
+        <span class="mono-num tone-success-text" id="f_psaleprice" style="font-size:15px;">${initialSale}</span>
+      </div>
       <label class="field-label" style="margin-top:10px;">Stock</label><input class="field-input" type="number" id="f_pstock" value="${p ? p.stock : ""}">
       <div class="modal-actions"><button class="btn-ghost" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveProduct('${id || ""}')">Save</button></div>
     </div>`);
 }
 function saveProduct(id) {
-  const payload = { name: val("f_pname"), companyId: val("f_pcompany"), unit: val("f_punit"), price: Number(val("f_pprice")) || 0, stock: Number(val("f_pstock")) || 0 };
+  const purchasePrice = Number(val("f_ppurchase")) || 0;
+  const commissionPct = Number(val("f_pcommission")) || 0;
+  const price = purchasePrice + (purchasePrice * commissionPct) / 100;
+  const payload = { name: val("f_pname"), companyId: val("f_pcompany"), unit: val("f_punit"), purchasePrice, commissionPct, price, stock: Number(val("f_pstock")) || 0 };
   if (!payload.name) return alert("Name আবশ্যক।");
   if (id) Object.assign(DATA.products.find((x) => x.id === id), payload);
   else DATA.products.push({ id: genId("p"), ...payload });
@@ -314,7 +355,7 @@ function viewReps() {
     <div class="panel">
       ${printHeader("Representative List", "Collection & Distribution Manager")}
       <table class="data-table" id="repsTable">
-        <thead><tr><th>Name</th><th>Phone</th><th>Area</th><th>Collected</th><th>Delivered</th><th>Payable</th><th class="no-print"></th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Area</th><th>Collected</th><th>Delivered</th><th>Payable</th><th></th></tr></thead>
         <tbody>
           ${DATA.reps.length === 0 ? `<tr><td colspan="7"><div class="empty-state">কোনো প্রতিনিধি নেই।</div></td></tr>` :
             DATA.reps.map((r) => {
@@ -325,7 +366,7 @@ function viewReps() {
                 <td class="mono-num tone-success-text">${fmtMoney(collected)}</td>
                 <td class="mono-num tone-gold-text">${fmtMoney(delivered)}</td>
                 <td class="mono-num tone-danger-text">${fmtMoney(payables[r.id] || 0)}</td>
-                <td class="no-print" onclick="event.stopPropagation()"><button class="icon-btn" onclick="openRepModal('${r.id}')">✏️</button><button class="icon-btn" onclick="deleteRep('${r.id}')">🗑️</button></td>
+                <td onclick="event.stopPropagation()"><button class="icon-btn" onclick="openRepModal('${r.id}')">✏️</button><button class="icon-btn" onclick="deleteRep('${r.id}')">🗑️</button></td>
               </tr>
               <tr id="log_${r.id}" style="display:none;"><td colspan="7" style="background:#FAFBFC;">
                 ${deliveryLogTable(r.id)}
@@ -382,7 +423,7 @@ function openDeliveryModal(id) {
       <label class="field-label" style="margin-top:10px;">Representative</label><select class="field-input" id="f_drep">${DATA.reps.map((r) => `<option value="${r.id}" ${d && d.repId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
       <label class="field-label" style="margin-top:14px;">Product Lines</label>
       <div id="itemBuilder">${renderItemRows()}</div>
-      <button type="button" class="btn-ghost" style="margin-top:6px;font-size:12px;" onclick="addItemRow()">+ Add line</button>
+      <button class="btn-ghost" style="margin-top:6px;font-size:12px;" onclick="addItemRow()">+ Add line</button>
       <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);font-weight:700;">
         <span>Total</span><span class="mono-num tone-gold-text" id="deliveryTotal">${fmtMoney(itemsTotal())}</span>
       </div>
@@ -417,7 +458,7 @@ function saveDelivery(id) {
   const cleanItems = window._deliveryItems.filter((it) => it.productId && Number(it.qty) > 0).map((it) => ({ productId: it.productId, qty: Number(it.qty), price: Number(it.price) || 0 }));
   if (!cleanItems.length) return alert("অন্তত একটা প্রোডাক্ট লাইন যোগ করুন।");
   const total = cleanItems.reduce((s, it) => s + it.qty * it.price, 0);
-  const payload = { date: val("f_ddate"), customerId: val("f_dcustomer"), repId: val("f_drep"), items: cleanItems, total };
+  const payload = { date: normDate(val("f_ddate")), customerId: val("f_dcustomer"), repId: val("f_drep"), items: cleanItems, total };
   if (id) {
     const old = DATA.deliveries.find((x) => x.id === id);
     adjustStock(old.items, +1);
@@ -438,7 +479,7 @@ function deleteDelivery(id) {
 }
 
 /* ---------------------------------- 05 Collection ---------------------------------- */
-let COLLECTION_VIEW_MODE = "grouped";
+let COLLECTION_VIEW_MODE = "grouped"; // grouped | flat
 function viewCollection() {
   const rows = [...DATA.collections].sort((a, b) => (a.date < b.date ? 1 : -1));
   const total = rows.reduce((s, r) => s + r.amount, 0);
@@ -491,7 +532,7 @@ function openCollectionModal(id) {
     </div>`);
 }
 function saveCollection(id) {
-  const payload = { date: val("f_cdate"), customerId: val("f_ccustomer"), repId: val("f_crep"), amount: Number(val("f_camount")) || 0, method: val("f_cmethod"), note: val("f_cnote") };
+  const payload = { date: normDate(val("f_cdate")), customerId: val("f_ccustomer"), repId: val("f_crep"), amount: Number(val("f_camount")) || 0, method: val("f_cmethod"), note: val("f_cnote") };
   if (!payload.amount) return alert("Amount আবশ্যক।");
   if (id) Object.assign(DATA.collections.find((x) => x.id === id), payload);
   else DATA.collections.push({ id: genId("col"), ...payload });
@@ -560,7 +601,7 @@ function openDistributionModal(id) {
     </div>`);
 }
 function saveDistribution(id) {
-  const payload = { date: val("f_xdate"), repId: val("f_xrep"), companyId: val("f_xcompany"), repAmount: Number(val("f_xrepamt")) || 0, companyAmount: Number(val("f_xcoamt")) || 0, note: val("f_xnote") };
+  const payload = { date: normDate(val("f_xdate")), repId: val("f_xrep"), companyId: val("f_xcompany"), repAmount: Number(val("f_xrepamt")) || 0, companyAmount: Number(val("f_xcoamt")) || 0, note: val("f_xnote") };
   if (id) Object.assign(DATA.distributions.find((v) => v.id === id), payload);
   else DATA.distributions.push({ id: genId("dst"), ...payload });
   closeModal(); persist();
@@ -594,7 +635,7 @@ function customerLedgerHTML() {
   const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: bal, opening: true }];
   rows.forEach((r) => { bal = bal + r.debit - r.credit; withBal.push({ ...r, balance: bal }); });
   return `
-    <select class="field-input no-print" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_CUSTOMER=this.value;renderView();">
+    <select class="field-input" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_CUSTOMER=this.value;renderView();">
       ${DATA.customers.map((c) => `<option value="${c.id}" ${c.id === customer.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}
     </select>
     <div class="panel">
@@ -621,7 +662,7 @@ function repLedgerHTML() {
   const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: 0, opening: true }];
   rows.forEach((r) => { bal = bal + r.credit - r.debit; withBal.push({ ...r, balance: bal }); });
   return `
-    <select class="field-input no-print" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_REP=this.value;renderView();">
+    <select class="field-input" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_REP=this.value;renderView();">
       ${DATA.reps.map((r) => `<option value="${r.id}" ${r.id === rep.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
     </select>
     <div class="panel">
@@ -705,7 +746,7 @@ function reportMonthly() {
     </div>
     <div class="panel"><h3 class="panel-title">${monthLabel(REPORT_MONTH)} — দৈনিক বিভাজন</h3>
       <table class="data-table"><thead><tr><th>Day</th><th>Collection</th><th>Delivery</th><th>Distributed</th></tr></thead><tbody>
-        ${rows.map((r) => `<tr><td>${r.d}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("")}
+        ${rows.length ? rows.map((r) => `<tr><td>${r.d}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">এই মাসে কিছু নেই।</div></td></tr>`}
       </tbody></table>
     </div>`;
 }
@@ -786,11 +827,11 @@ function updateSyncPill() {
 /* ---------------------------------- boot ---------------------------------- */
 function bootApp() {
   if (typeof isConfigured === "function" && isConfigured()) {
-    loadData().then((remote) => { DATA = remote; render(); }).catch((e) => {
+    loadData().then((remote) => { DATA = normalizeAllDates(remote); render(); }).catch((e) => {
       document.getElementById("root").innerHTML = `<div class="app-loading">⚠️ লোড ব্যর্থ: ${esc(e.message)}<br><button class="btn-primary" onclick="location.reload()">আবার চেষ্টা করুন</button></div>`;
     });
   } else {
-    DATA = seedData();
+    DATA = normalizeAllDates(seedData());
     render();
   }
 }

@@ -19,4 +19,3 @@ async function saveData(data) {
   if (!res.ok) throw new Error("Google Sheet-এ সেভ করতে ব্যর্থ (status " + res.status + ")");
   return res.json();
 }
-
