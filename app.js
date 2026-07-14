@@ -9,7 +9,7 @@ let SIDEBAR_OPEN = false;
 const CUSTOMER_TYPES = ["Retailer", "Wholesaler", "Distributor"];
 const PRODUCT_UNITS = ["pcs", "set", "box", "carton"];
 const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Mobile Banking", "Cheque"];
-const AREAS = ["North Zone", "South Zone", "East Zone", "West Zone", "Central"];
+const AREAS = ["Feni Sadar", "Sonagazi", "Daganbhuiyan", "Chhagalnaiya","Fullgazi", "Parashuram" ];
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", num: "01" },
