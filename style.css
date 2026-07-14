@@ -63,3 +63,40 @@ body{margin:0; background:var(--paper); color:var(--text); font-family:Arial,san
 .tabs{display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border);}
 .tab-btn{background:transparent; border:none; padding:9px 14px; font-size:13px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; font-weight:600;}
 .tab-active{color:var(--ink); border-bottom-color:var(--gold);}
+
+/* ---------------------------------- v2 additions ---------------------------------- */
+.hamburger-btn{display:flex; flex-direction:column; justify-content:center; gap:4px; width:34px; height:34px; background:transparent; border:1px solid var(--border); border-radius:8px; cursor:pointer; padding:0; align-items:center;}
+.hamburger-btn span{display:block; width:16px; height:2px; background:var(--text); border-radius:2px;}
+.sidebar-overlay{position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:59; display:none;}
+.sidebar-overlay.show{display:block;}
+@media (max-width:900px){
+  .sidebar{position:fixed; left:-260px; top:0; bottom:0; z-index:60; transition:left .2s ease; box-shadow:0 0 30px rgba(0,0,0,0.3);}
+  .sidebar.open{left:0;}
+  .hamburger-btn{display:flex;}
+}
+@media (min-width:901px){ .hamburger-btn{display:none;} }
+
+.print-btn{background:var(--card); border:1px solid var(--border); padding:8px 13px; border-radius:8px; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;}
+.print-btn:hover{background:#EEF1F3;}
+
+.login-screen{display:flex; align-items:center; justify-content:center; height:100vh; background:var(--paper);}
+.login-card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:32px; width:100%; max-width:340px; text-align:center;}
+.login-card .brand-mark{margin:0 auto 14px;}
+.login-card h2{margin:0 0 4px; font-size:18px;}
+.login-card p{color:var(--muted); font-size:12.5px; margin:0 0 18px;}
+.login-error{color:var(--danger); font-size:12.5px; margin-top:8px;}
+
+.group-block{border:1px solid var(--border); border-radius:10px; margin-bottom:12px; overflow:hidden;}
+.group-head{display:flex; justify-content:space-between; align-items:center; background:#FAFBFC; padding:10px 14px; font-size:13px; font-weight:700; cursor:pointer;}
+.group-head .g-total{font-family:monospace; color:var(--success);}
+
+@media print{
+  .sidebar, .topbar, .toolbar, .icon-btn, .btn-primary, .btn-ghost, .config-banner, .hamburger-btn, .sidebar-overlay, .no-print{ display:none !important; }
+  .app-body{ display:block !important; }
+  .content{ padding:0 !important; max-width:100% !important; }
+  body{ background:#fff !important; }
+  .print-area{ display:block !important; }
+  .panel{ border:none !important; box-shadow:none !important; }
+}
+.print-only{display:none;}
+@media print{ .print-only{display:block;} }
