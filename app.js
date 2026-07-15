@@ -143,7 +143,9 @@ function render() {
             <div><div class="topbar-eyebrow">Folio ${active.num}</div><h1 class="topbar-title">${active.label}</h1></div>
             <div class="topbar-right"><span class="sync-pill sync-${SYNC_STATE}">${{ idle: "সংযুক্ত", saving: "সেভ হচ্ছে…", saved: "সেভ হয়েছে", error: "সেভ ব্যর্থ" }[SYNC_STATE]}</span></div>
           </header>
+          <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01991-181158 (Admin)</div>
           <main class="content" id="content"></main>
+          <footer class="app-footer-bar no-print">@PreparedBy: AMShahed — 01605721296</footer>
         </div>
       </div>
     </div>`;
@@ -169,16 +171,67 @@ function viewDashboard() {
   const bal = customerBalances();
   const totalOutstanding = Object.values(bal).reduce((s, v) => s + v, 0);
   const today = todayStr();
+  const monthPrefix = today.slice(0, 7);
+
   const todayCollection = DATA.collections.filter((c) => c.date === today).reduce((s, c) => s + c.amount, 0);
   const todayDelivery = DATA.deliveries.filter((d) => d.date === today).reduce((s, d) => s + d.total, 0);
+  const todayDistribution = DATA.distributions.filter((x) => x.date === today).reduce((s, x) => s + x.repAmount + x.companyAmount, 0);
+
+  const monthCollection = DATA.collections.filter((c) => c.date.startsWith(monthPrefix)).reduce((s, c) => s + c.amount, 0);
+  const monthDelivery = DATA.deliveries.filter((d) => d.date.startsWith(monthPrefix)).reduce((s, d) => s + d.total, 0);
+  const monthDistribution = DATA.distributions.filter((x) => x.date.startsWith(monthPrefix)).reduce((s, x) => s + x.repAmount + x.companyAmount, 0);
+
+  const grandCollection = DATA.collections.reduce((s, c) => s + c.amount, 0);
+  const grandDelivery = DATA.deliveries.reduce((s, d) => s + d.total, 0);
+  const grandDistribution = DATA.distributions.reduce((s, x) => s + x.repAmount + x.companyAmount, 0);
+
   const lowStock = DATA.products.filter((p) => p.stock < 15);
+  const todayLabel = new Date(today).toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  const monthLbl = monthLabel(monthPrefix);
+
   return `
+    <div class="panel" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div><strong>${esc(todayLabel)}</strong></div>
+      <div class="muted-text">চলমান মাস: <strong>${esc(monthLbl)}</strong></div>
+    </div>
+
     <div class="grid" style="margin-bottom:16px;">
       <div class="stat-card"><div class="stat-label">Total Customers</div><div class="stat-value">${DATA.customers.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Representatives</div><div class="stat-value">${DATA.reps.length}</div></div>
       <div class="stat-card"><div class="stat-label">Total Products</div><div class="stat-value">${DATA.products.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Today's Collection</div><div class="stat-value tone-success-text">${fmtMoney(todayCollection)}</div></div>
-      <div class="stat-card"><div class="stat-label">Today's Delivery</div><div class="stat-value tone-gold-text">${fmtMoney(todayDelivery)}</div></div>
+      <div class="stat-card"><div class="stat-label">Customer Balance Due</div><div class="stat-value tone-danger-text">${fmtMoney(totalOutstanding)}</div></div>
     </div>
+
+    <div class="panel"><h3 class="panel-title">📅 আজকের তথ্য — ${esc(fmtDate(today))}</h3>
+      <table class="data-table"><thead><tr><th>Collection</th><th>Delivery</th><th>Distribution</th></tr></thead>
+        <tbody><tr>
+          <td class="mono-num tone-success-text">${fmtMoney(todayCollection)}</td>
+          <td class="mono-num tone-gold-text">${fmtMoney(todayDelivery)}</td>
+          <td class="mono-num">${fmtMoney(todayDistribution)}</td>
+        </tr></tbody>
+      </table>
+    </div>
+
+    <div class="panel"><h3 class="panel-title">🗓️ এই মাসের তথ্য — ${esc(monthLbl)}</h3>
+      <table class="data-table"><thead><tr><th>Collection</th><th>Delivery</th><th>Distribution</th></tr></thead>
+        <tbody><tr>
+          <td class="mono-num tone-success-text">${fmtMoney(monthCollection)}</td>
+          <td class="mono-num tone-gold-text">${fmtMoney(monthDelivery)}</td>
+          <td class="mono-num">${fmtMoney(monthDistribution)}</td>
+        </tr></tbody>
+      </table>
+    </div>
+
+    <div class="panel"><h3 class="panel-title">📊 সর্বমোট (Grand Total)</h3>
+      <table class="data-table"><thead><tr><th>Collection</th><th>Delivery</th><th>Distribution</th></tr></thead>
+        <tbody><tr>
+          <td class="mono-num tone-success-text">${fmtMoney(grandCollection)}</td>
+          <td class="mono-num tone-gold-text">${fmtMoney(grandDelivery)}</td>
+          <td class="mono-num">${fmtMoney(grandDistribution)}</td>
+        </tr></tbody>
+      </table>
+    </div>
+
     <div class="panel"><h3 class="panel-title">Cash Position</h3>
       <table class="data-table"><tbody>
         <tr><td>Customer balance due</td><td class="mono-num tone-danger-text">${fmtMoney(totalOutstanding)}</td></tr>
@@ -382,13 +435,30 @@ function toggleRepLog(id) {
 }
 function deliveryLogTable(repId) {
   const rows = DATA.deliveries.filter((d) => d.repId === repId).sort((a, b) => (a.date < b.date ? 1 : -1));
-  return `<table class="data-table"><thead><tr><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th></th></tr></thead><tbody>
+  return `<table class="data-table"><thead><tr><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th class="no-print"></th></tr></thead><tbody>
     ${rows.length === 0 ? `<tr><td colspan="5"><div class="empty-state">কোনো ডেলিভারি নেই।</div></td></tr>` :
       rows.map((d) => `<tr><td>${fmtDate(d.date)}</td><td><strong>${esc(idToName(DATA.customers, d.customerId))}</strong></td>
         <td style="font-size:11px;">${d.items.map((it) => `${esc(idToName(DATA.products, it.productId))} ×${it.qty}`).join(", ")}</td>
         <td class="mono-num tone-gold-text">${fmtMoney(d.total)}</td>
-        <td><button class="icon-btn" onclick="event.stopPropagation();openDeliveryModal('${d.id}')">✏️</button><button class="icon-btn" onclick="event.stopPropagation();deleteDelivery('${d.id}')">🗑️</button></td></tr>`).join("")}
+        <td class="no-print"><button class="icon-btn" onclick="event.stopPropagation();openDeliveryModal('${d.id}')">✏️</button><button class="icon-btn" onclick="event.stopPropagation();deleteDelivery('${d.id}')">🗑️</button><button class="icon-btn" onclick="event.stopPropagation();printSingleDelivery('${d.id}')" title="Print Receipt">🖨️</button></td></tr>`).join("")}
   </tbody></table>`;
+}
+function printSingleDelivery(id) {
+  const d = DATA.deliveries.find((x) => x.id === id);
+  if (!d) return;
+  const html = `
+    <h2 style="margin:0 0 4px;">Delivery Receipt</h2>
+    <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
+    <table class="data-table"><tbody>
+      <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(d.date))}</td></tr>
+      <tr><td><strong>Customer</strong></td><td>${esc(idToName(DATA.customers, d.customerId))}</td></tr>
+      <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, d.repId))}</td></tr>
+    </tbody></table>
+    <table class="data-table" style="margin-top:12px;"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Line Total</th></tr></thead>
+      <tbody>${d.items.map((it) => `<tr><td>${esc(idToName(DATA.products, it.productId))}</td><td class="mono-num">${it.qty}</td><td class="mono-num">${fmtMoney(it.price)}</td><td class="mono-num">${fmtMoney(it.qty * it.price)}</td></tr>`).join("")}</tbody>
+    </table>
+    <div style="text-align:right;margin-top:10px;font-weight:700;">Total: <span class="mono-num tone-gold-text" style="font-size:16px;">${fmtMoney(d.total)}</span></div>`;
+  printReceiptHTML(html);
 }
 function openRepModal(id) {
   const r = id ? DATA.reps.find((x) => x.id === id) : null;
@@ -504,7 +574,7 @@ function collectionFlatTable(rows) {
     <thead><tr><th>Date</th><th>Customer</th><th>Rep</th><th>Method</th><th>Amount</th><th class="no-print"></th></tr></thead>
     <tbody>${rows.map((c) => `<tr><td>${fmtDate(c.date)}</td><td><strong>${esc(idToName(DATA.customers, c.customerId))}</strong></td><td>${esc(idToName(DATA.reps, c.repId))}</td>
       <td><span class="badge">${esc(c.method)}</span></td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td>
-      <td class="no-print"><button class="icon-btn" onclick="openCollectionModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCollection('${c.id}')">🗑️</button></td></tr>`).join("")}</tbody>
+      <td class="no-print"><button class="icon-btn" onclick="openCollectionModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCollection('${c.id}')">🗑️</button><button class="icon-btn" onclick="printSingleCollection('${c.id}')" title="Print Receipt">🖨️</button></td></tr>`).join("")}</tbody>
   </table>`;
 }
 function collectionGroupBlock(g) {
@@ -514,9 +584,25 @@ function collectionGroupBlock(g) {
     <table class="data-table"><thead><tr><th>Customer</th><th>Rep</th><th>Method</th><th>Amount</th><th class="no-print"></th></tr></thead>
       <tbody>${g.rows.map((c) => `<tr><td><strong>${esc(idToName(DATA.customers, c.customerId))}</strong></td><td>${esc(idToName(DATA.reps, c.repId))}</td>
         <td><span class="badge">${esc(c.method)}</span></td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td>
-        <td class="no-print"><button class="icon-btn" onclick="openCollectionModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCollection('${c.id}')">🗑️</button></td></tr>`).join("")}</tbody>
+        <td class="no-print"><button class="icon-btn" onclick="openCollectionModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCollection('${c.id}')">🗑️</button><button class="icon-btn" onclick="printSingleCollection('${c.id}')" title="Print Receipt">🖨️</button></td></tr>`).join("")}</tbody>
     </table>
   </div>`;
+}
+function printSingleCollection(id) {
+  const c = DATA.collections.find((x) => x.id === id);
+  if (!c) return;
+  const html = `
+    <h2 style="margin:0 0 4px;">Collection Receipt</h2>
+    <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
+    <table class="data-table"><tbody>
+      <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(c.date))}</td></tr>
+      <tr><td><strong>Customer</strong></td><td>${esc(idToName(DATA.customers, c.customerId))}</td></tr>
+      <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, c.repId))}</td></tr>
+      <tr><td><strong>Method</strong></td><td>${esc(c.method)}</td></tr>
+      <tr><td><strong>Amount</strong></td><td class="mono-num tone-success-text" style="font-size:16px;">${fmtMoney(c.amount)}</td></tr>
+      ${c.note ? `<tr><td><strong>Note</strong></td><td>${esc(c.note)}</td></tr>` : ""}
+    </tbody></table>`;
+  printReceiptHTML(html);
 }
 function openCollectionModal(id) {
   const c = id ? DATA.collections.find((x) => x.id === id) : null;
@@ -573,7 +659,7 @@ function distributionFlatTable(rows) {
     <thead><tr><th>Date</th><th>Rep</th><th>Company</th><th>To Rep</th><th>To Company</th><th>Total</th><th class="no-print"></th></tr></thead>
     <tbody>${rows.map((x) => `<tr><td>${fmtDate(x.date)}</td><td><strong>${esc(idToName(DATA.reps, x.repId))}</strong></td><td>${esc(idToName(DATA.companies, x.companyId))}</td>
       <td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td><td class="mono-num tone-gold-text">${fmtMoney(x.repAmount + x.companyAmount)}</td>
-      <td class="no-print"><button class="icon-btn" onclick="openDistributionModal('${x.id}')">✏️</button><button class="icon-btn" onclick="deleteDistribution('${x.id}')">🗑️</button></td></tr>`).join("")}</tbody>
+      <td class="no-print"><button class="icon-btn" onclick="openDistributionModal('${x.id}')">✏️</button><button class="icon-btn" onclick="deleteDistribution('${x.id}')">🗑️</button><button class="icon-btn" onclick="printSingleDistribution('${x.id}')" title="Print Receipt">🖨️</button></td></tr>`).join("")}</tbody>
   </table>`;
 }
 function distributionGroupBlock(g) {
@@ -583,9 +669,26 @@ function distributionGroupBlock(g) {
     <table class="data-table"><thead><tr><th>Rep</th><th>Company</th><th>To Rep</th><th>To Company</th><th class="no-print"></th></tr></thead>
       <tbody>${g.rows.map((x) => `<tr><td><strong>${esc(idToName(DATA.reps, x.repId))}</strong></td><td>${esc(idToName(DATA.companies, x.companyId))}</td>
         <td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td>
-        <td class="no-print"><button class="icon-btn" onclick="openDistributionModal('${x.id}')">✏️</button><button class="icon-btn" onclick="deleteDistribution('${x.id}')">🗑️</button></td></tr>`).join("")}</tbody>
+        <td class="no-print"><button class="icon-btn" onclick="openDistributionModal('${x.id}')">✏️</button><button class="icon-btn" onclick="deleteDistribution('${x.id}')">🗑️</button><button class="icon-btn" onclick="printSingleDistribution('${x.id}')" title="Print Receipt">🖨️</button></td></tr>`).join("")}</tbody>
     </table>
   </div>`;
+}
+function printSingleDistribution(id) {
+  const x = DATA.distributions.find((v) => v.id === id);
+  if (!x) return;
+  const html = `
+    <h2 style="margin:0 0 4px;">Distribution Receipt</h2>
+    <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
+    <table class="data-table"><tbody>
+      <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(x.date))}</td></tr>
+      <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, x.repId))}</td></tr>
+      <tr><td><strong>Company</strong></td><td>${esc(idToName(DATA.companies, x.companyId))}</td></tr>
+      <tr><td><strong>Amount to Representative</strong></td><td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td></tr>
+      <tr><td><strong>Amount to Company</strong></td><td class="mono-num">${fmtMoney(x.companyAmount)}</td></tr>
+      <tr><td><strong>Total</strong></td><td class="mono-num tone-gold-text" style="font-size:16px;">${fmtMoney(x.repAmount + x.companyAmount)}</td></tr>
+      ${x.note ? `<tr><td><strong>Note</strong></td><td>${esc(x.note)}</td></tr>` : ""}
+    </tbody></table>`;
+  printReceiptHTML(html);
 }
 function openDistributionModal(id) {
   const x = id ? DATA.distributions.find((v) => v.id === id) : null;
@@ -777,11 +880,17 @@ function reportYearly() {
 }
 
 /* ---------------------------------- print helper ---------------------------------- */
-function printButton(label) {
-  return `<button class="print-btn no-print" onclick="window.print()">🖨️ ${label || "Print"}</button>`;
+// Printing is done through a hidden, isolated iframe containing ONLY the receipt/report
+// content, instead of calling window.print() on the live app (which was including the
+// fixed/sticky sidebar & modal-overlay elements and producing a trailing blank page).
+function printButton(label, targetSelector) {
+  const sel = targetSelector ? `'${targetSelector}'` : "null";
+  return `<button class="print-btn no-print" onclick="printCurrentPanel(${sel})">🖨️ ${label || "Print"}</button>`;
 }
 function printHeader(title, subtitle) {
-  return `<div class="print-only" style="margin-bottom:14px;">
+  // Kept for on-screen semantic markup (used to build print content) but no longer relies on
+  // @media print visibility toggling.
+  return `<div class="print-only" data-print-title="${esc(title)}" data-print-subtitle="${esc(subtitle || "")}" style="margin-bottom:14px;">
     <h2 style="margin:0;">${esc(title)}</h2>
     <div style="font-size:12px;color:var(--muted);">${esc(subtitle || "")} — Printed on ${fmtDate(todayStr())}</div>
   </div>`;
@@ -790,6 +899,69 @@ function groupByDate(rows) {
   const map = {};
   rows.forEach((r) => { (map[r.date] = map[r.date] || []).push(r); });
   return Object.keys(map).sort((a, b) => (a < b ? 1 : -1)).map((date) => ({ date, rows: map[date] }));
+}
+
+const PRINT_HEADER_HTML = `
+  <div class="receipt-print-header">
+    <strong>Emdadul Haque Shaheen</strong> — 01991-181158 (Admin)
+  </div>`;
+const PRINT_FOOTER_HTML = `
+  <div class="receipt-print-footer">
+    @PreparedBy: AMShahed — 01605721296
+  </div>`;
+
+function printCurrentPanel(targetSelector) {
+  const source = targetSelector ? document.querySelector(targetSelector) : document.getElementById("content");
+  if (!source) return;
+  const clone = source.cloneNode(true);
+  clone.querySelectorAll(".no-print").forEach((el) => el.remove());
+  printReceiptHTML(clone.innerHTML);
+}
+
+function printReceiptHTML(innerHtml) {
+  const existing = document.getElementById("printFrame");
+  if (existing) existing.remove();
+  const iframe = document.createElement("iframe");
+  iframe.id = "printFrame";
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Print</title>
+    <style>
+      *{box-sizing:border-box;}
+      body{font-family:Arial,sans-serif;font-size:13px;color:#1A2233;margin:20px;}
+      table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;}
+      th{text-align:left;font-size:11px;text-transform:uppercase;color:#6B7785;border-bottom:2px solid #E3E7EA;padding:0 8px 8px;}
+      td{padding:8px;border-bottom:1px solid #E3E7EA;}
+      .mono-num{font-family:monospace;font-weight:600;}
+      .tone-success-text{color:#2F8F5B;} .tone-danger-text{color:#C0392B;} .tone-gold-text{color:#8A5A1F;}
+      .badge{background:#EEF1F3;font-size:11px;padding:3px 9px;border-radius:20px;}
+      .group-block{border:1px solid #E3E7EA;border-radius:8px;margin-bottom:10px;overflow:hidden;}
+      .group-head{display:flex;justify-content:space-between;background:#FAFBFC;padding:8px 12px;font-weight:700;font-size:13px;}
+      .receipt-print-header{border-bottom:2px solid #14293D;padding-bottom:8px;margin-bottom:16px;font-size:13px;}
+      .receipt-print-footer{border-top:1px solid #E3E7EA;margin-top:24px;padding-top:8px;font-size:11px;color:#6B7785;text-align:center;}
+      h2{font-size:17px;margin:0 0 4px;}
+      @page{margin:14mm;}
+    </style>
+    </head><body>
+      ${PRINT_HEADER_HTML}
+      ${innerHtml}
+      ${PRINT_FOOTER_HTML}
+    </body></html>`);
+  doc.close();
+
+  iframe.onload = () => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => iframe.remove(), 1000);
+  };
 }
 
 /* ---------------------------------- modal + utils ---------------------------------- */
