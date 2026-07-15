@@ -914,7 +914,7 @@ function printCurrentPanel(targetSelector) {
   const source = targetSelector ? document.querySelector(targetSelector) : document.getElementById("content");
   if (!source) return;
   const clone = source.cloneNode(true);
-  clone.querySelectorAll(".no-print").forEach((el) => el.remove());
+  clone.querySelectorAll(".no-print, .toolbar, .search-box, button, select, input, .tabs").forEach((el) => el.remove());
   printReceiptHTML(clone.innerHTML);
 }
 
