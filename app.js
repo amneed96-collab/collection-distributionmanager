@@ -89,7 +89,7 @@ function renderLogin(errorMsg) {
     <div class="login-screen">
       <div class="login-card">
         <div class="brand-mark" style="width:44px;height:44px;font-size:16px;">CD</div>
-        <h2>Admin Login</h2>
+        <h2>Emdadul Haque (ASO)</h2>
         <p>Collection & Distribution Manager</p>
         <input class="field-input" type="password" id="loginPass" placeholder="Password" onkeydown="if(event.key==='Enter') doLogin()">
         <div class="modal-actions" style="justify-content:center;margin-top:14px;">
