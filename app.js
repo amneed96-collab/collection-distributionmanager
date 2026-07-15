@@ -9,7 +9,7 @@ let SIDEBAR_OPEN = false;
 const CUSTOMER_TYPES = ["Retailer", "Wholesaler", "Distributor"];
 const PRODUCT_UNITS = ["pcs", "set", "box", "carton"];
 const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Mobile Banking", "Cheque"];
-const AREAS = ["Feni Sadar", "Sonagazi", "Daganbhuiyan", "Chhagalnaiya", "Fulgazi", "Parshuram", "Sitakunda", "Noakhali", "Maijdee", "Senbagh", "Chowmuhani"];
+const AREAS = ["Feni Sadar", "Sonagazi", "Daganbhuiyan", "Chhagalnaiya", "Fulgazi", "Parshuram", "Joralganj", "Baroirhat", "Mirsarai", "Sitakunda", "Noakhali", "Maijdee", "Senbagh", "Chowmuhani"];
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", num: "01" },
@@ -139,7 +139,7 @@ function render() {
             <div><div class="topbar-eyebrow">Folio ${active.num}</div><h1 class="topbar-title">${active.label}</h1></div>
             <div class="topbar-right"><span class="sync-pill sync-${SYNC_STATE}">${{ idle: "সংযুক্ত", saving: "সেভ হচ্ছে…", saved: "সেভ হয়েছে", error: "সেভ ব্যর্থ" }[SYNC_STATE]}</span></div>
           </header>
-          <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01991-181158 (Admin)</div>
+          <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01813934246 (Admin)</div>
           <main class="content" id="content"></main>
           <footer class="app-footer-bar no-print">@PreparedBy: AMShahed — 01605721296</footer>
         </div>
