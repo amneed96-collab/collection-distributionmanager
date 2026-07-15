@@ -139,7 +139,7 @@ function render() {
             <div><div class="topbar-eyebrow">Folio ${active.num}</div><h1 class="topbar-title">${active.label}</h1></div>
             <div class="topbar-right"><span class="sync-pill sync-${SYNC_STATE}">${{ idle: "সংযুক্ত", saving: "সেভ হচ্ছে…", saved: "সেভ হয়েছে", error: "সেভ ব্যর্থ" }[SYNC_STATE]}</span></div>
           </header>
-          <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01813934246 (Admin)</div>
+          <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01813934246 (ASO)</div>
           <main class="content" id="content"></main>
           <footer class="app-footer-bar no-print">@PreparedBy: AMShahed — 01605721296</footer>
         </div>
