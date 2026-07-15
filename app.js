@@ -25,10 +25,6 @@ const NAV = [
 /* ---------------------------------- helpers ---------------------------------- */
 const genId = (p) => p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const todayStr = () => new Date().toISOString().slice(0, 10);
-// Normalizes any date value (JS Date, ISO datetime string, or plain YYYY-MM-DD) to "YYYY-MM-DD".
-// Google Sheets returns dates as full datetime strings/objects, which broke exact string
-// comparisons in the Report view (Daily/Monthly always showed 00). This guarantees a
-// consistent plain date string everywhere in the app.
 function normDate(d) {
   if (!d) return "";
   if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
@@ -249,15 +245,14 @@ function viewDashboard() {
 function viewCustomers() {
   const bal = customerBalances();
   return `
-    <div class="toolbar">
+    <div class="toolbar no-print">
       <div class="search-box">🔍 <input placeholder="খুঁজুন..." oninput="filterTable('customersTable', this.value)"></div>
       <button class="btn-primary" onclick="openCustomerModal()">+ Add Customer</button>
-      ${printButton("Print Customer List")}
+      ${printButton("Print Customer List", "printCustomerList")}
     </div>
     <div class="panel">
-      ${printHeader("Customer List", "Collection & Distribution Manager")}
       <table class="data-table" id="customersTable">
-        <thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Area</th><th>Balance</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Area</th><th>Balance</th><th class="no-print"></th></tr></thead>
         <tbody>
           ${DATA.customers.length === 0 ? `<tr><td colspan="6"><div class="empty-state">কোনো কাস্টমার নেই।</div></td></tr>` :
             DATA.customers.map((c) => `
@@ -267,11 +262,16 @@ function viewCustomers() {
                 <td><span class="badge">${esc(c.type)}</span></td>
                 <td>${esc(c.area)}</td>
                 <td class="mono-num ${(bal[c.id] || 0) > 0 ? "tone-danger-text" : "tone-success-text"}">${fmtMoney(bal[c.id] || 0)}</td>
-                <td><button class="icon-btn" onclick="openCustomerModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCustomer('${c.id}')">🗑️</button></td>
+                <td class="no-print"><button class="icon-btn" onclick="openCustomerModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCustomer('${c.id}')">🗑️</button></td>
               </tr>`).join("")}
         </tbody>
       </table>
     </div>`;
+}
+function printCustomerList() {
+  const bal = customerBalances();
+  const rows = DATA.customers.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.phone)}</td><td>${esc(c.type)}</td><td>${esc(c.area)}</td><td class="mono-num ${(bal[c.id] || 0) > 0 ? "tone-danger-text" : "tone-success-text"}">${fmtMoney(bal[c.id] || 0)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Customer List", "Collection & Distribution Manager")}<table><thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Area</th><th>Balance</th></tr></thead><tbody>${rows || `<tr><td colspan="5">কোনো কাস্টমার নেই।</td></tr>`}</tbody></table>`);
 }
 function openCustomerModal(id) {
   const c = id ? DATA.customers.find((x) => x.id === id) : null;
@@ -305,12 +305,11 @@ function deleteCustomer(id) {
 /* ---------------------------------- 03 Products ---------------------------------- */
 function viewProducts() {
   return `
-    <div class="toolbar">
+    <div class="toolbar no-print">
       <div class="search-box">🔍 <input placeholder="খুঁজুন..." oninput="filterTable('productsTable', this.value)"></div>
-      <div><button class="btn-ghost" onclick="openCompanyModal()">+ Add Company</button> <button class="btn-primary" onclick="openProductModal()" ${!DATA.companies.length ? "disabled" : ""}>+ Add Product</button> ${printButton("Print Product List")}</div>
+      <div><button class="btn-ghost" onclick="openCompanyModal()">+ Add Company</button> <button class="btn-primary" onclick="openProductModal()" ${!DATA.companies.length ? "disabled" : ""}>+ Add Product</button> ${printButton("Print Product List", "printProductList")}</div>
     </div>
     <div class="panel">
-      ${printHeader("Product List", "Collection & Distribution Manager")}
       <table class="data-table" id="productsTable">
         <thead><tr><th>Product</th><th>Company</th><th>Unit</th><th>Purchase</th><th>Commission</th><th>Sale Price</th><th>Stock</th><th class="no-print"></th></tr></thead>
         <tbody>
@@ -332,12 +331,16 @@ function viewProducts() {
     <div class="panel">
       <h3 class="panel-title">Companies</h3>
       <table class="data-table">
-        <thead><tr><th>Company</th><th>Products</th><th></th></tr></thead>
+        <thead><tr><th>Company</th><th>Products</th><th class="no-print"></th></tr></thead>
         <tbody>
-          ${DATA.companies.map((co) => `<tr><td><strong>${esc(co.name)}</strong></td><td>${DATA.products.filter((p) => p.companyId === co.id).length}</td><td><button class="icon-btn" onclick="deleteCompany('${co.id}')">🗑️</button></td></tr>`).join("")}
+          ${DATA.companies.map((co) => `<tr><td><strong>${esc(co.name)}</strong></td><td>${DATA.products.filter((p) => p.companyId === co.id).length}</td><td class="no-print"><button class="icon-btn" onclick="deleteCompany('${co.id}')">🗑️</button></td></tr>`).join("")}
         </tbody>
       </table>
     </div>`;
+}
+function printProductList() {
+  const rows = DATA.products.map((p) => `<tr><td>${esc(p.name)}</td><td>${esc(idToName(DATA.companies, p.companyId))}</td><td>${esc(p.unit)}</td><td class="mono-num">${fmtMoney(p.purchasePrice || 0)}</td><td class="mono-num">${(p.commissionPct || 0)}%</td><td class="mono-num tone-success-text">${fmtMoney(p.price)}</td><td class="mono-num">${p.stock}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Product List", "Collection & Distribution Manager")}<table><thead><tr><th>Product</th><th>Company</th><th>Unit</th><th>Purchase</th><th>Commission</th><th>Sale Price</th><th>Stock</th></tr></thead><tbody>${rows || `<tr><td colspan="7">কোনো প্রোডাক্ট নেই।</td></tr>`}</tbody></table>`);
 }
 function openCompanyModal() {
   openModal("Add Company", `<div class="modal-body"><label class="field-label">Company Name</label><input class="field-input" id="f_coname">
@@ -401,14 +404,13 @@ function deleteProduct(id) {
 function viewReps() {
   const payables = repPayables();
   return `
-    <div class="toolbar">
+    <div class="toolbar no-print">
       <div class="search-box">🔍 <input placeholder="খুঁজুন..." oninput="filterTable('repsTable', this.value)"></div>
-      <div><button class="btn-ghost" onclick="openDeliveryModal()" ${!DATA.customers.length || !DATA.reps.length || !DATA.products.length ? "disabled" : ""}>+ Record Delivery</button> <button class="btn-primary" onclick="openRepModal()">+ Add Representative</button> ${printButton("Print Rep List")}</div>
+      <div><button class="btn-ghost" onclick="openDeliveryModal()" ${!DATA.customers.length || !DATA.reps.length || !DATA.products.length ? "disabled" : ""}>+ Record Delivery</button> <button class="btn-primary" onclick="openRepModal()">+ Add Representative</button> ${printButton("Print Rep List", "printRepList")}</div>
     </div>
     <div class="panel">
-      ${printHeader("Representative List", "Collection & Distribution Manager")}
       <table class="data-table" id="repsTable">
-        <thead><tr><th>Name</th><th>Phone</th><th>Area</th><th>Collected</th><th>Delivered</th><th>Payable</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Area</th><th>Collected</th><th>Delivered</th><th>Payable</th><th class="no-print"></th></tr></thead>
         <tbody>
           ${DATA.reps.length === 0 ? `<tr><td colspan="7"><div class="empty-state">কোনো প্রতিনিধি নেই।</div></td></tr>` :
             DATA.reps.map((r) => {
@@ -419,7 +421,7 @@ function viewReps() {
                 <td class="mono-num tone-success-text">${fmtMoney(collected)}</td>
                 <td class="mono-num tone-gold-text">${fmtMoney(delivered)}</td>
                 <td class="mono-num tone-danger-text">${fmtMoney(payables[r.id] || 0)}</td>
-                <td onclick="event.stopPropagation()"><button class="icon-btn" onclick="openRepModal('${r.id}')">✏️</button><button class="icon-btn" onclick="deleteRep('${r.id}')">🗑️</button></td>
+                <td class="no-print" onclick="event.stopPropagation()"><button class="icon-btn" onclick="openRepModal('${r.id}')">✏️</button><button class="icon-btn" onclick="deleteRep('${r.id}')">🗑️</button></td>
               </tr>
               <tr id="log_${r.id}" style="display:none;"><td colspan="7" style="background:#FAFBFC;">
                 ${deliveryLogTable(r.id)}
@@ -428,6 +430,15 @@ function viewReps() {
         </tbody>
       </table>
     </div>`;
+}
+function printRepList() {
+  const payables = repPayables();
+  const rows = DATA.reps.map((r) => {
+    const collected = DATA.collections.filter((c) => c.repId === r.id).reduce((s, c) => s + c.amount, 0);
+    const delivered = DATA.deliveries.filter((d) => d.repId === r.id).reduce((s, d) => s + d.total, 0);
+    return `<tr><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc(r.area)}</td><td class="mono-num tone-success-text">${fmtMoney(collected)}</td><td class="mono-num tone-gold-text">${fmtMoney(delivered)}</td><td class="mono-num tone-danger-text">${fmtMoney(payables[r.id] || 0)}</td></tr>`;
+  }).join("");
+  printReceiptHTML(`${printHeader("Representative List", "Collection & Distribution Manager")}<table><thead><tr><th>Name</th><th>Phone</th><th>Area</th><th>Collected</th><th>Delivered</th><th>Payable</th></tr></thead><tbody>${rows || `<tr><td colspan="6">কোনো প্রতিনিধি নেই।</td></tr>`}</tbody></table>`);
 }
 function toggleRepLog(id) {
   const row = document.getElementById("log_" + id);
@@ -449,12 +460,12 @@ function printSingleDelivery(id) {
   const html = `
     <h2 style="margin:0 0 4px;">Delivery Receipt</h2>
     <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
-    <table class="data-table"><tbody>
+    <table><tbody>
       <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(d.date))}</td></tr>
       <tr><td><strong>Customer</strong></td><td>${esc(idToName(DATA.customers, d.customerId))}</td></tr>
       <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, d.repId))}</td></tr>
     </tbody></table>
-    <table class="data-table" style="margin-top:12px;"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Line Total</th></tr></thead>
+    <table style="margin-top:12px;"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Line Total</th></tr></thead>
       <tbody>${d.items.map((it) => `<tr><td>${esc(idToName(DATA.products, it.productId))}</td><td class="mono-num">${it.qty}</td><td class="mono-num">${fmtMoney(it.price)}</td><td class="mono-num">${fmtMoney(it.qty * it.price)}</td></tr>`).join("")}</tbody>
     </table>
     <div style="text-align:right;margin-top:10px;font-weight:700;">Total: <span class="mono-num tone-gold-text" style="font-size:16px;">${fmtMoney(d.total)}</span></div>`;
@@ -493,7 +504,7 @@ function openDeliveryModal(id) {
       <label class="field-label" style="margin-top:10px;">Representative</label><select class="field-input" id="f_drep">${DATA.reps.map((r) => `<option value="${r.id}" ${d && d.repId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
       <label class="field-label" style="margin-top:14px;">Product Lines</label>
       <div id="itemBuilder">${renderItemRows()}</div>
-      <button class="btn-ghost" style="margin-top:6px;font-size:12px;" onclick="addItemRow()">+ Add line</button>
+      <button type="button" class="btn-ghost" style="margin-top:6px;font-size:12px;" onclick="addItemRow()">+ Add line</button>
       <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);font-weight:700;">
         <span>Total</span><span class="mono-num tone-gold-text" id="deliveryTotal">${fmtMoney(itemsTotal())}</span>
       </div>
@@ -549,21 +560,20 @@ function deleteDelivery(id) {
 }
 
 /* ---------------------------------- 05 Collection ---------------------------------- */
-let COLLECTION_VIEW_MODE = "grouped"; // grouped | flat
+let COLLECTION_VIEW_MODE = "grouped";
 function viewCollection() {
   const rows = [...DATA.collections].sort((a, b) => (a.date < b.date ? 1 : -1));
   const total = rows.reduce((s, r) => s + r.amount, 0);
   const groups = groupByDate(rows);
   return `
-    <div class="toolbar"><div style="font-size:12.5px;color:var(--muted);">Admin কাস্টমার থেকে টাকা কালেকশন করবে। একই দিনের একাধিক এন্ট্রি একসাথে গ্রুপ হয়ে দেখাবে।</div>
+    <div class="toolbar no-print"><div style="font-size:12.5px;color:var(--muted);">Admin কাস্টমার থেকে টাকা কালেকশন করবে। একই দিনের একাধিক এন্ট্রি একসাথে গ্রুপ হয়ে দেখাবে।</div>
       <div>
         <button class="btn-ghost" onclick="COLLECTION_VIEW_MODE = COLLECTION_VIEW_MODE==='grouped'?'flat':'grouped'; renderView();">${COLLECTION_VIEW_MODE === "grouped" ? "🔀 Flat View" : "📅 Grouped View"}</button>
         <button class="btn-primary" onclick="openCollectionModal()" ${!DATA.customers.length || !DATA.reps.length ? "disabled" : ""}>+ Record Collection</button>
-        ${printButton("Print All Receipts")}
+        ${printButton("Print All Receipts", "printAllCollections")}
       </div>
     </div>
     <div class="panel">
-      ${printHeader("Collection Receipt", "Collection & Distribution Manager")}
       ${rows.length === 0 ? `<div class="empty-state">কোনো কালেকশন নেই।</div>` :
         COLLECTION_VIEW_MODE === "grouped" ? groups.map((g) => collectionGroupBlock(g)).join("") : collectionFlatTable(rows)}
       ${rows.length ? `<div style="text-align:right;font-weight:700;margin-top:10px;">সর্বমোট: <span class="mono-num tone-success-text">${fmtMoney(total)}</span></div>` : ""}
@@ -594,7 +604,7 @@ function printSingleCollection(id) {
   const html = `
     <h2 style="margin:0 0 4px;">Collection Receipt</h2>
     <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
-    <table class="data-table"><tbody>
+    <table><tbody>
       <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(c.date))}</td></tr>
       <tr><td><strong>Customer</strong></td><td>${esc(idToName(DATA.customers, c.customerId))}</td></tr>
       <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, c.repId))}</td></tr>
@@ -603,6 +613,17 @@ function printSingleCollection(id) {
       ${c.note ? `<tr><td><strong>Note</strong></td><td>${esc(c.note)}</td></tr>` : ""}
     </tbody></table>`;
   printReceiptHTML(html);
+}
+function printAllCollections() {
+  const rows = [...DATA.collections].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const groups = groupByDate(rows);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const body = groups.map((g) => {
+    const dayTotal = g.rows.reduce((s, r) => s + r.amount, 0);
+    const trs = g.rows.map((c) => `<tr><td>${esc(idToName(DATA.customers, c.customerId))}</td><td>${esc(idToName(DATA.reps, c.repId))}</td><td>${esc(c.method)}</td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td></tr>`).join("");
+    return `<div class="group-block"><div class="group-head"><span>${fmtDate(g.date)}</span><span>${fmtMoney(dayTotal)}</span></div><table><thead><tr><th>Customer</th><th>Rep</th><th>Method</th><th>Amount</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  }).join("");
+  printReceiptHTML(`${printHeader("Collection Receipt", "Collection & Distribution Manager")}${body || "<p>কোনো কালেকশন নেই।</p>"}${rows.length ? `<div style="text-align:right;font-weight:700;margin-top:10px;">সর্বমোট: ${fmtMoney(total)}</div>` : ""}`);
 }
 function openCollectionModal(id) {
   const c = id ? DATA.collections.find((x) => x.id === id) : null;
@@ -636,11 +657,11 @@ function viewDistribution() {
   const rows = [...DATA.distributions].sort((a, b) => (a.date < b.date ? 1 : -1));
   const groups = groupByDate(rows);
   return `
-    <div class="toolbar"><div style="font-size:12.5px;color:var(--muted);">Admin কালেকশন করা টাকা প্রতিনিধি ও কোম্পানীকে ভাগ করে দেবে। একই দিনের একাধিক এন্ট্রি একসাথে দেখাবে।</div>
+    <div class="toolbar no-print"><div style="font-size:12.5px;color:var(--muted);">Admin কালেকশন করা টাকা প্রতিনিধি ও কোম্পানীকে ভাগ করে দেবে। একই দিনের একাধিক এন্ট্রি একসাথে দেখাবে।</div>
       <div>
         <button class="btn-ghost" onclick="DISTRIBUTION_VIEW_MODE = DISTRIBUTION_VIEW_MODE==='grouped'?'flat':'grouped'; renderView();">${DISTRIBUTION_VIEW_MODE === "grouped" ? "🔀 Flat View" : "📅 Grouped View"}</button>
         <button class="btn-primary" onclick="openDistributionModal()" ${!DATA.reps.length || !DATA.companies.length ? "disabled" : ""}>+ Record Distribution</button>
-        ${printButton("Print All Receipts")}
+        ${printButton("Print All Receipts", "printAllDistributions")}
       </div>
     </div>
     <div class="grid" style="margin-bottom:16px;">
@@ -649,7 +670,6 @@ function viewDistribution() {
       <div class="stat-card"><div class="stat-label">Total to Companies</div><div class="stat-value">${fmtMoney(rows.reduce((s, r) => s + r.companyAmount, 0))}</div></div>
     </div>
     <div class="panel">
-      ${printHeader("Distribution Receipt", "Collection & Distribution Manager")}
       ${rows.length === 0 ? `<div class="empty-state">কোনো ডিস্ট্রিবিউশন নেই।</div>` :
         DISTRIBUTION_VIEW_MODE === "grouped" ? groups.map((g) => distributionGroupBlock(g)).join("") : distributionFlatTable(rows)}
     </div>`;
@@ -679,7 +699,7 @@ function printSingleDistribution(id) {
   const html = `
     <h2 style="margin:0 0 4px;">Distribution Receipt</h2>
     <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
-    <table class="data-table"><tbody>
+    <table><tbody>
       <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(x.date))}</td></tr>
       <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, x.repId))}</td></tr>
       <tr><td><strong>Company</strong></td><td>${esc(idToName(DATA.companies, x.companyId))}</td></tr>
@@ -689,6 +709,16 @@ function printSingleDistribution(id) {
       ${x.note ? `<tr><td><strong>Note</strong></td><td>${esc(x.note)}</td></tr>` : ""}
     </tbody></table>`;
   printReceiptHTML(html);
+}
+function printAllDistributions() {
+  const rows = [...DATA.distributions].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const groups = groupByDate(rows);
+  const body = groups.map((g) => {
+    const dayTotal = g.rows.reduce((s, r) => s + r.repAmount + r.companyAmount, 0);
+    const trs = g.rows.map((x) => `<tr><td>${esc(idToName(DATA.reps, x.repId))}</td><td>${esc(idToName(DATA.companies, x.companyId))}</td><td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td></tr>`).join("");
+    return `<div class="group-block"><div class="group-head"><span>${fmtDate(g.date)}</span><span>${fmtMoney(dayTotal)}</span></div><table><thead><tr><th>Rep</th><th>Company</th><th>To Rep</th><th>To Company</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  }).join("");
+  printReceiptHTML(`${printHeader("Distribution Receipt", "Collection & Distribution Manager")}${body || "<p>কোনো ডিস্ট্রিবিউশন নেই।</p>"}`);
 }
 function openDistributionModal(id) {
   const x = id ? DATA.distributions.find((v) => v.id === id) : null;
@@ -721,7 +751,7 @@ function viewLedger() {
   if (!LEDGER_CUSTOMER && DATA.customers[0]) LEDGER_CUSTOMER = DATA.customers[0].id;
   if (!LEDGER_REP && DATA.reps[0]) LEDGER_REP = DATA.reps[0].id;
   return `
-    <div class="tabs">
+    <div class="tabs no-print">
       <button class="tab-btn ${LEDGER_TAB === "customer" ? "tab-active" : ""}" onclick="LEDGER_TAB='customer';renderView();">Customer Ledger</button>
       <button class="tab-btn ${LEDGER_TAB === "rep" ? "tab-active" : ""}" onclick="LEDGER_TAB='rep';renderView();">Representative Ledger</button>
     </div>
@@ -738,21 +768,33 @@ function customerLedgerHTML() {
   const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: bal, opening: true }];
   rows.forEach((r) => { bal = bal + r.debit - r.credit; withBal.push({ ...r, balance: bal }); });
   return `
-    <select class="field-input" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_CUSTOMER=this.value;renderView();">
+    <select class="field-input no-print" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_CUSTOMER=this.value;renderView();">
       ${DATA.customers.map((c) => `<option value="${c.id}" ${c.id === customer.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}
     </select>
     <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;justify-content:space-between;align-items:center;" class="no-print">
         <h3 class="panel-title">Ledger — ${esc(customer.name)}</h3>
-        ${printButton("Print Ledger")}
+        ${printButton("Print Ledger", "printCustomerLedger")}
       </div>
-      ${printHeader("Customer Ledger — " + customer.name, customer.area + " · " + customer.phone)}
       <table class="data-table"><thead><tr><th>Date</th><th>Particulars</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
         <tbody>${withBal.map((e) => `<tr><td>${e.opening ? "—" : fmtDate(e.date)}</td><td><strong>${esc(e.type)}</strong></td>
           <td class="mono-num">${e.debit ? fmtMoney(e.debit) : "-"}</td><td class="mono-num">${e.credit ? fmtMoney(e.credit) : "-"}</td>
           <td class="mono-num ${e.balance > 0 ? "tone-danger-text" : "tone-success-text"}">${fmtMoney(e.balance)}</td></tr>`).join("")}</tbody>
       </table>
     </div>`;
+}
+function printCustomerLedger() {
+  const customer = DATA.customers.find((c) => c.id === LEDGER_CUSTOMER);
+  if (!customer) return;
+  const rows = [];
+  DATA.deliveries.filter((d) => d.customerId === customer.id).forEach((d) => rows.push({ date: d.date, type: "Delivery", debit: d.total, credit: 0 }));
+  DATA.collections.filter((c) => c.customerId === customer.id).forEach((c) => rows.push({ date: c.date, type: "Collection (" + c.method + ")", debit: 0, credit: c.amount }));
+  rows.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+  let bal = customer.opening || 0;
+  const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: bal, opening: true }];
+  rows.forEach((r) => { bal = bal + r.debit - r.credit; withBal.push({ ...r, balance: bal }); });
+  const trs = withBal.map((e) => `<tr><td>${e.opening ? "—" : fmtDate(e.date)}</td><td>${esc(e.type)}</td><td class="mono-num">${e.debit ? fmtMoney(e.debit) : "-"}</td><td class="mono-num">${e.credit ? fmtMoney(e.credit) : "-"}</td><td class="mono-num ${e.balance > 0 ? "tone-danger-text" : "tone-success-text"}">${fmtMoney(e.balance)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Customer Ledger — " + customer.name, customer.area + " · " + customer.phone)}<table><thead><tr><th>Date</th><th>Particulars</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead><tbody>${trs}</tbody></table>`);
 }
 function repLedgerHTML() {
   if (!DATA.reps.length) return `<div class="panel"><div class="empty-state">কোনো প্রতিনিধি নেই।</div></div>`;
@@ -765,15 +807,14 @@ function repLedgerHTML() {
   const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: 0, opening: true }];
   rows.forEach((r) => { bal = bal + r.credit - r.debit; withBal.push({ ...r, balance: bal }); });
   return `
-    <select class="field-input" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_REP=this.value;renderView();">
+    <select class="field-input no-print" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_REP=this.value;renderView();">
       ${DATA.reps.map((r) => `<option value="${r.id}" ${r.id === rep.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
     </select>
     <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;justify-content:space-between;align-items:center;" class="no-print">
         <h3 class="panel-title">Ledger — ${esc(rep.name)}</h3>
-        ${printButton("Print Ledger")}
+        ${printButton("Print Ledger", "printRepLedger")}
       </div>
-      ${printHeader("Representative Ledger — " + rep.name, rep.area + " · " + rep.phone)}
       <table class="data-table"><thead><tr><th>Date</th><th>Particulars</th><th>Credit</th><th>Debit</th><th>Cash in Hand</th></tr></thead>
         <tbody>${withBal.map((e) => `<tr><td>${e.opening ? "—" : fmtDate(e.date)}</td><td><strong>${esc(e.type)}</strong></td>
           <td class="mono-num">${e.credit ? fmtMoney(e.credit) : "-"}</td><td class="mono-num">${e.debit ? fmtMoney(e.debit) : "-"}</td>
@@ -781,29 +822,46 @@ function repLedgerHTML() {
       </table>
     </div>`;
 }
+function printRepLedger() {
+  const rep = DATA.reps.find((r) => r.id === LEDGER_REP);
+  if (!rep) return;
+  const rows = [];
+  DATA.collections.filter((c) => c.repId === rep.id).forEach((c) => rows.push({ date: c.date, type: "Collected from " + idToName(DATA.customers, c.customerId), debit: 0, credit: c.amount }));
+  DATA.distributions.filter((x) => x.repId === rep.id).forEach((x) => rows.push({ date: x.date, type: `Settled — ${fmtMoney(x.repAmount)} rep, ${fmtMoney(x.companyAmount)} to ${idToName(DATA.companies, x.companyId)}`, debit: x.repAmount + x.companyAmount, credit: 0 }));
+  rows.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+  let bal = 0;
+  const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: 0, opening: true }];
+  rows.forEach((r) => { bal = bal + r.credit - r.debit; withBal.push({ ...r, balance: bal }); });
+  const trs = withBal.map((e) => `<tr><td>${e.opening ? "—" : fmtDate(e.date)}</td><td>${esc(e.type)}</td><td class="mono-num">${e.credit ? fmtMoney(e.credit) : "-"}</td><td class="mono-num">${e.debit ? fmtMoney(e.debit) : "-"}</td><td class="mono-num ${e.balance > 0 ? "tone-danger-text" : "tone-success-text"}">${fmtMoney(e.balance)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Representative Ledger — " + rep.name, rep.area + " · " + rep.phone)}<table><thead><tr><th>Date</th><th>Particulars</th><th>Credit</th><th>Debit</th><th>Cash in Hand</th></tr></thead><tbody>${trs}</tbody></table>`);
+}
 
 /* ---------------------------------- 08 Report ---------------------------------- */
 let REPORT_TAB = "daily", REPORT_DAY = todayStr(), REPORT_MONTH = todayStr().slice(0, 7), REPORT_YEAR = todayStr().slice(0, 4);
 function viewReport() {
   return `
-    <div class="toolbar">
+    <div class="toolbar no-print">
       <div class="tabs" style="margin-bottom:0;border-bottom:none;">
         <button class="tab-btn ${REPORT_TAB === "daily" ? "tab-active" : ""}" onclick="REPORT_TAB='daily';renderView();">Daily</button>
         <button class="tab-btn ${REPORT_TAB === "monthly" ? "tab-active" : ""}" onclick="REPORT_TAB='monthly';renderView();">Monthly</button>
         <button class="tab-btn ${REPORT_TAB === "yearly" ? "tab-active" : ""}" onclick="REPORT_TAB='yearly';renderView();">Yearly</button>
       </div>
-      ${printButton("Print Report")}
+      ${printButton("Print Report", "printCurrentReport")}
     </div>
     <div id="reportBody">
       ${REPORT_TAB === "daily" ? reportDaily() : REPORT_TAB === "monthly" ? reportMonthly() : reportYearly()}
     </div>`;
+}
+function printCurrentReport() {
+  if (REPORT_TAB === "daily") return printDailyReport();
+  if (REPORT_TAB === "monthly") return printMonthlyReport();
+  return printYearlyReport();
 }
 function reportDaily() {
   const cols = DATA.collections.filter((c) => c.date === REPORT_DAY);
   const dels = DATA.deliveries.filter((d) => d.date === REPORT_DAY);
   const dists = DATA.distributions.filter((x) => x.date === REPORT_DAY);
   return `
-    ${printHeader("Daily Report — " + fmtDate(REPORT_DAY), "Collection & Distribution Manager")}
     <input class="field-input no-print" type="date" style="max-width:200px;margin-bottom:14px;" value="${REPORT_DAY}" onchange="REPORT_DAY=this.value;renderView();">
     <div class="grid" style="margin-bottom:16px;">
       <div class="stat-card"><div class="stat-label">Collections</div><div class="stat-value tone-success-text">${fmtMoney(cols.reduce((s, c) => s + c.amount, 0))}</div></div>
@@ -826,6 +884,18 @@ function reportDaily() {
       </tbody></table>
     </div>`;
 }
+function printDailyReport() {
+  const cols = DATA.collections.filter((c) => c.date === REPORT_DAY);
+  const dels = DATA.deliveries.filter((d) => d.date === REPORT_DAY);
+  const dists = DATA.distributions.filter((x) => x.date === REPORT_DAY);
+  const colTrs = cols.map((c) => `<tr><td>${esc(idToName(DATA.customers, c.customerId))}</td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td></tr>`).join("");
+  const delTrs = dels.map((d) => `<tr><td>${esc(idToName(DATA.customers, d.customerId))}</td><td class="mono-num tone-gold-text">${fmtMoney(d.total)}</td></tr>`).join("");
+  const distTrs = dists.map((x) => `<tr><td>${esc(idToName(DATA.reps, x.repId))} / ${esc(idToName(DATA.companies, x.companyId))}</td><td class="mono-num">${fmtMoney(x.repAmount + x.companyAmount)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Daily Report — " + fmtDate(REPORT_DAY), "Collection & Distribution Manager")}
+    <h3>Collections</h3><table><thead><tr><th>Customer</th><th>Amount</th></tr></thead><tbody>${colTrs || `<tr><td colspan="2">নেই</td></tr>`}</tbody></table>
+    <h3>Deliveries</h3><table><thead><tr><th>Customer</th><th>Total</th></tr></thead><tbody>${delTrs || `<tr><td colspan="2">নেই</td></tr>`}</tbody></table>
+    <h3>Distributions</h3><table><thead><tr><th>Rep / Company</th><th>Total</th></tr></thead><tbody>${distTrs || `<tr><td colspan="2">নেই</td></tr>`}</tbody></table>`);
+}
 function reportMonthly() {
   const [y, m] = REPORT_MONTH.split("-");
   const daysInMonth = new Date(Number(y), Number(m), 0).getDate();
@@ -840,7 +910,6 @@ function reportMonthly() {
     rows.push({ d, col, del, dist });
   }
   return `
-    ${printHeader("Monthly Report — " + monthLabel(REPORT_MONTH), "Collection & Distribution Manager")}
     <input class="field-input no-print" type="month" style="max-width:200px;margin-bottom:14px;" value="${REPORT_MONTH}" onchange="REPORT_MONTH=this.value;renderView();">
     <div class="grid" style="margin-bottom:16px;">
       <div class="stat-card"><div class="stat-label">Collections</div><div class="stat-value tone-success-text">${fmtMoney(totalCol)}</div></div>
@@ -849,9 +918,23 @@ function reportMonthly() {
     </div>
     <div class="panel"><h3 class="panel-title">${monthLabel(REPORT_MONTH)} — দৈনিক বিভাজন</h3>
       <table class="data-table"><thead><tr><th>Day</th><th>Collection</th><th>Delivery</th><th>Distributed</th></tr></thead><tbody>
-        ${rows.length ? rows.map((r) => `<tr><td>${r.d}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">এই মাসে কিছু নেই।</div></td></tr>`}
+        ${rows.map((r) => `<tr><td>${r.d}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("")}
       </tbody></table>
     </div>`;
+}
+function printMonthlyReport() {
+  const [y, m] = REPORT_MONTH.split("-");
+  const daysInMonth = new Date(Number(y), Number(m), 0).getDate();
+  const rows = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${y}-${m}-${String(d).padStart(2, "0")}`;
+    const col = DATA.collections.filter((c) => c.date === ds).reduce((s, c) => s + c.amount, 0);
+    const del = DATA.deliveries.filter((x) => x.date === ds).reduce((s, x) => s + x.total, 0);
+    const dist = DATA.distributions.filter((x) => x.date === ds).reduce((s, x) => s + x.repAmount + x.companyAmount, 0);
+    rows.push({ d, col, del, dist });
+  }
+  const trs = rows.map((r) => `<tr><td>${r.d}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Monthly Report — " + monthLabel(REPORT_MONTH), "Collection & Distribution Manager")}<table><thead><tr><th>Day</th><th>Collection</th><th>Delivery</th><th>Distributed</th></tr></thead><tbody>${trs}</tbody></table>`);
 }
 function reportYearly() {
   let totalCol = 0, totalDel = 0, totalDist = 0;
@@ -865,7 +948,6 @@ function reportYearly() {
     rows.push({ label: monthLabel(prefix).split(" ")[0], col, del, dist });
   }
   return `
-    ${printHeader("Yearly Report — " + REPORT_YEAR, "Collection & Distribution Manager")}
     <input class="field-input no-print" type="number" style="max-width:120px;margin-bottom:14px;" value="${REPORT_YEAR}" onchange="REPORT_YEAR=this.value;renderView();">
     <div class="grid" style="margin-bottom:16px;">
       <div class="stat-card"><div class="stat-label">Collections</div><div class="stat-value tone-success-text">${fmtMoney(totalCol)}</div></div>
@@ -878,21 +960,27 @@ function reportYearly() {
       </tbody></table>
     </div>`;
 }
+function printYearlyReport() {
+  const rows = [];
+  for (let m = 1; m <= 12; m++) {
+    const prefix = `${REPORT_YEAR}-${String(m).padStart(2, "0")}`;
+    const col = DATA.collections.filter((c) => c.date.startsWith(prefix)).reduce((s, c) => s + c.amount, 0);
+    const del = DATA.deliveries.filter((x) => x.date.startsWith(prefix)).reduce((s, x) => s + x.total, 0);
+    const dist = DATA.distributions.filter((x) => x.date.startsWith(prefix)).reduce((s, x) => s + x.repAmount + x.companyAmount, 0);
+    rows.push({ label: monthLabel(prefix).split(" ")[0], col, del, dist });
+  }
+  const trs = rows.map((r) => `<tr><td>${r.label}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Yearly Report — " + REPORT_YEAR, "Collection & Distribution Manager")}<table><thead><tr><th>Month</th><th>Collection</th><th>Delivery</th><th>Distributed</th></tr></thead><tbody>${trs}</tbody></table>`);
+}
 
-/* ---------------------------------- print helper ---------------------------------- */
-// Printing is done through a hidden, isolated iframe containing ONLY the receipt/report
-// content, instead of calling window.print() on the live app (which was including the
-// fixed/sticky sidebar & modal-overlay elements and producing a trailing blank page).
-function printButton(label, targetSelector) {
-  const sel = targetSelector ? `'${targetSelector}'` : "null";
-  return `<button class="print-btn no-print" onclick="printCurrentPanel(${sel})">🖨️ ${label || "Print"}</button>`;
+/* ---------------------------------- print helper (data-driven, no DOM cloning) ---------------------------------- */
+function printButton(label, fn) {
+  return `<button class="print-btn no-print" onclick="${fn}()">🖨️ ${label || "Print"}</button>`;
 }
 function printHeader(title, subtitle) {
-  // Kept for on-screen semantic markup (used to build print content) but no longer relies on
-  // @media print visibility toggling.
-  return `<div class="print-only" data-print-title="${esc(title)}" data-print-subtitle="${esc(subtitle || "")}" style="margin-bottom:14px;">
+  return `<div style="margin-bottom:14px;">
     <h2 style="margin:0;">${esc(title)}</h2>
-    <div style="font-size:12px;color:var(--muted);">${esc(subtitle || "")} — Printed on ${fmtDate(todayStr())}</div>
+    <div style="font-size:12px;color:#6B7785;">${esc(subtitle || "")} — Printed on ${fmtDate(todayStr())}</div>
   </div>`;
 }
 function groupByDate(rows) {
@@ -901,22 +989,8 @@ function groupByDate(rows) {
   return Object.keys(map).sort((a, b) => (a < b ? 1 : -1)).map((date) => ({ date, rows: map[date] }));
 }
 
-const PRINT_HEADER_HTML = `
-  <div class="receipt-print-header">
-    <strong>Emdadul Haque Shaheen</strong> — 01991-181158 (Admin)
-  </div>`;
-const PRINT_FOOTER_HTML = `
-  <div class="receipt-print-footer">
-    @PreparedBy: AMShahed — 01605721296
-  </div>`;
-
-function printCurrentPanel(targetSelector) {
-  const source = targetSelector ? document.querySelector(targetSelector) : document.getElementById("content");
-  if (!source) return;
-  const clone = source.cloneNode(true);
-  clone.querySelectorAll(".no-print, .toolbar, .search-box, button, select, input, .tabs").forEach((el) => el.remove());
-  printReceiptHTML(clone.innerHTML);
-}
+const PRINT_HEADER_HTML = `<div class="receipt-print-header"><strong>Emdadul Haque Shaheen</strong> — 01991-181158 (Admin)</div>`;
+const PRINT_FOOTER_HTML = `<div class="receipt-print-footer">@PreparedBy: AMShahed — 01605721296</div>`;
 
 function printReceiptHTML(innerHtml) {
   const existing = document.getElementById("printFrame");
@@ -948,6 +1022,7 @@ function printReceiptHTML(innerHtml) {
       .receipt-print-header{border-bottom:2px solid #14293D;padding-bottom:8px;margin-bottom:16px;font-size:13px;}
       .receipt-print-footer{border-top:1px solid #E3E7EA;margin-top:24px;padding-top:8px;font-size:11px;color:#6B7785;text-align:center;}
       h2{font-size:17px;margin:0 0 4px;}
+      h3{font-size:14px;margin:16px 0 6px;}
       @page{margin:14mm;}
     </style>
     </head><body>
