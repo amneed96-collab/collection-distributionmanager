@@ -5,8 +5,8 @@ let SYNC_STATE = "idle";
 let saveTimer = null;
 let SIDEBAR_OPEN = false;
 
-// Session/auth
-let SESSION = null; // { role: 'admin' | 'customer' | 'rep', id: <customerId|repId|null> }
+// SESSION: { role: 'admin' | 'customer' | 'rep', id: <customerId|repId|null> }
+let SESSION = null;
 
 const CUSTOMER_TYPES = ["Retailer", "Wholesaler", "Distributor"];
 const PRODUCT_UNITS = ["pcs", "set", "box", "carton"];
@@ -27,6 +27,10 @@ const NAV = [
 /* ---------------------------------- helpers ---------------------------------- */
 const genId = (p) => p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const todayStr = () => new Date().toISOString().slice(0, 10);
+// Normalizes any date value (JS Date, ISO datetime string, or plain YYYY-MM-DD) to "YYYY-MM-DD".
+// Google Sheets returns dates as full datetime strings/objects, which broke exact string
+// comparisons in the Report view (Daily/Monthly always showed 00). This guarantees a
+// consistent plain date string everywhere in the app.
 function normDate(d) {
   if (!d) return "";
   if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
@@ -53,14 +57,14 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 function seedData() {
   const companies = [{ id: "co1", name: "Ananya Publications" }, { id: "co2", name: "Kakoli Prokashoni" }, { id: "co3", name: "Somoy Prokashon" }];
   const customers = [
-    { id: "c1", name: "Karim Traders", phone: "01711-000111", address: "Feni Sadar", area: "Feni Sadar", type: "Wholesaler", opening: 5000, username: "karim", password: "1234" },
-    { id: "c2", name: "Rahman General Store", phone: "01822-000222", address: "Chowmuhani", area: "Chowmuhani", type: "Retailer", opening: 0, username: "rahman", password: "1234" },
+    { id: "c1", name: "Karim Traders", phone: "01711-000111", address: "Feni Sadar", area: "Feni Sadar", type: "Wholesaler", opening: 5000, password: "1234" },
+    { id: "c2", name: "Rahman General Store", phone: "01822-000222", address: "Chowmuhani", area: "Chowmuhani", type: "Retailer", opening: 0, password: "1234" },
   ];
   const products = [
     { id: "p1", name: "Bangla Shahitto Songroho", companyId: "co1", unit: "pcs", purchasePrice: 280, commissionPct: 25, price: 350, stock: 120 },
     { id: "p2", name: "General Knowledge 2026", companyId: "co1", unit: "pcs", purchasePrice: 224, commissionPct: 25, price: 280, stock: 85 },
   ];
-  const reps = [{ id: "r1", name: "Jahangir Alam", phone: "01711-111000", area: "Feni Sadar", username: "jahangir", password: "1234" }];
+  const reps = [{ id: "r1", name: "Jahangir Alam", phone: "01711-111000", area: "Feni Sadar", password: "1234" }];
   return { companies, customers, products, reps, collections: [], deliveries: [], distributions: [] };
 }
 
@@ -86,7 +90,12 @@ function undistributedCash() {
 }
 
 /* ---------------------------------- login ---------------------------------- */
-let LOGIN_ROLE = "admin";
+function buildLoginOptions() {
+  const opts = [`<option value="admin">Admin</option>`];
+  DATA.customers.forEach((c) => opts.push(`<option value="cust:${c.id}">${esc(c.name)} (Cust)</option>`));
+  DATA.reps.forEach((r) => opts.push(`<option value="rep:${r.id}">${esc(r.name)} (Rep)</option>`));
+  return opts.join("");
+}
 function renderLogin(errorMsg) {
   document.getElementById("root").innerHTML = `
     <div class="login-screen">
@@ -94,12 +103,9 @@ function renderLogin(errorMsg) {
         <div class="brand-mark" style="width:44px;height:44px;font-size:16px;margin:0 auto 14px;">CD</div>
         <h2>Emdadul Haque (ASO)</h2>
         <p>Collection & Distribution Manager</p>
-        <div class="role-tabs">
-          <button class="role-tab ${LOGIN_ROLE === "admin" ? "role-active" : ""}" onclick="setLoginRole('admin')">Admin</button>
-          <button class="role-tab ${LOGIN_ROLE === "customer" ? "role-active" : ""}" onclick="setLoginRole('customer')">Customer</button>
-          <button class="role-tab ${LOGIN_ROLE === "rep" ? "role-active" : ""}" onclick="setLoginRole('rep')">Representative</button>
-        </div>
-        ${LOGIN_ROLE !== "admin" ? `<input class="field-input" id="loginUser" placeholder="Username" style="margin-bottom:10px;">` : ""}
+        <label class="field-label" style="text-align:left;">User</label>
+        <select class="field-input" id="loginUser" style="margin-bottom:10px;">${buildLoginOptions()}</select>
+        <label class="field-label" style="text-align:left;">Password</label>
         <input class="field-input" type="password" id="loginPass" placeholder="Password" onkeydown="if(event.key==='Enter') doLogin()">
         <div class="modal-actions" style="justify-content:center;margin-top:14px;">
           <button class="btn-primary" onclick="doLogin()" style="width:100%;">Login</button>
@@ -107,53 +113,144 @@ function renderLogin(errorMsg) {
         ${errorMsg ? `<div class="login-error">${esc(errorMsg)}</div>` : ""}
       </div>
     </div>`;
-  const inp = document.getElementById("loginUser") || document.getElementById("loginPass");
+  const inp = document.getElementById("loginPass");
   if (inp) inp.focus();
 }
-function setLoginRole(role) { LOGIN_ROLE = role; renderLogin(); }
 function doLogin() {
+  const sel = document.getElementById("loginUser").value;
   const pass = document.getElementById("loginPass").value;
-  if (LOGIN_ROLE === "admin") {
-    if (typeof ADMIN_PASSWORD === "string" && pass === ADMIN_PASSWORD) {
+
+  if (sel === "admin") {
+    if (typeof ADMIN_PASSWORD === "string" && ADMIN_PASSWORD && pass === ADMIN_PASSWORD) {
       SESSION = { role: "admin", id: null };
       sessionStorage.setItem("cdm_session", JSON.stringify(SESSION));
-      bootApp();
+      render();
     } else {
       renderLogin("ভুল পাসওয়ার্ড, আবার চেষ্টা করুন।");
     }
     return;
   }
-  const user = (document.getElementById("loginUser").value || "").trim();
-  if (LOGIN_ROLE === "customer") {
-    loadData().then((remote) => {
-      const data = normalizeAllDates(remote);
-      const found = data.customers.find((c) => c.username && c.username === user && c.password === pass);
-      if (!found) { renderLogin("ভুল ইউজারনেম বা পাসওয়ার্ড।"); return; }
-      DATA = data;
-      SESSION = { role: "customer", id: found.id };
+  if (sel.indexOf("cust:") === 0) {
+    const id = sel.slice(5);
+    const c = DATA.customers.find((x) => x.id === id);
+    if (c && c.password && c.password === pass) {
+      SESSION = { role: "customer", id };
       sessionStorage.setItem("cdm_session", JSON.stringify(SESSION));
       render();
-    }).catch(() => renderLogin("সার্ভারে সংযোগ করা যায়নি।"));
+    } else {
+      renderLogin("ভুল পাসওয়ার্ড, আবার চেষ্টা করুন।");
+    }
     return;
   }
-  if (LOGIN_ROLE === "rep") {
-    loadData().then((remote) => {
-      const data = normalizeAllDates(remote);
-      const found = data.reps.find((r) => r.username && r.username === user && r.password === pass);
-      if (!found) { renderLogin("ভুল ইউজারনেম বা পাসওয়ার্ড।"); return; }
-      DATA = data;
-      SESSION = { role: "rep", id: found.id };
+  if (sel.indexOf("rep:") === 0) {
+    const id = sel.slice(4);
+    const r = DATA.reps.find((x) => x.id === id);
+    if (r && r.password && r.password === pass) {
+      SESSION = { role: "rep", id };
       sessionStorage.setItem("cdm_session", JSON.stringify(SESSION));
       render();
-    }).catch(() => renderLogin("সার্ভারে সংযোগ করা যায়নি।"));
+    } else {
+      renderLogin("ভুল পাসওয়ার্ড, আবার চেষ্টা করুন।");
+    }
     return;
   }
 }
 function doLogout() {
   SESSION = null;
   sessionStorage.removeItem("cdm_session");
-  LOGIN_ROLE = "admin";
-  renderLogin();
+  loadInitialDataThenRoute();
+}
+
+/* ---------------------------------- Customer self-service portal ---------------------------------- */
+function renderCustomerPortal() {
+  const customer = DATA.customers.find((c) => c.id === SESSION.id);
+  const root = document.getElementById("root");
+  if (!customer) {
+    root.innerHTML = `<div class="app-loading">⚠️ অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।<br><button class="btn-primary" onclick="doLogout()">Logout</button></div>`;
+    return;
+  }
+  const myCollections = DATA.collections.filter((c) => c.customerId === customer.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const totalCollected = myCollections.reduce((s, c) => s + c.amount, 0);
+  const bal = customerBalances()[customer.id] || 0;
+
+  root.innerHTML = `
+    <div class="app-root">
+      <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01991-181158 (Admin)</div>
+      <div class="portal-topbar no-print">
+        <div><h1 class="topbar-title">স্বাগতম, ${esc(customer.name)}</h1><div class="topbar-eyebrow">Customer Portal</div></div>
+        <div>
+          <button class="print-btn" onclick="printMyCollections()">🖨️ Print</button>
+          <button class="btn-ghost" onclick="doLogout()">🔒 Logout</button>
+        </div>
+      </div>
+      <main class="content" style="max-width:900px;margin:0 auto;">
+        <div class="grid" style="margin-bottom:16px;">
+          <div class="stat-card"><div class="stat-label">মোট কালেকশন হয়েছে</div><div class="stat-value tone-success-text">${fmtMoney(totalCollected)}</div></div>
+          <div class="stat-card"><div class="stat-label">বর্তমান বকেয়া</div><div class="stat-value tone-danger-text">${fmtMoney(bal)}</div></div>
+        </div>
+        <div class="panel">
+          <h3 class="panel-title">আপনার কালেকশন হিস্টোরি</h3>
+          <table class="data-table"><thead><tr><th>Date</th><th>Method</th><th>Amount</th></tr></thead>
+            <tbody>${myCollections.length ? myCollections.map((c) => `<tr><td>${fmtDate(c.date)}</td><td><span class="badge">${esc(c.method)}</span></td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td></tr>`).join("") : `<tr><td colspan="3"><div class="empty-state">কোনো কালেকশন এন্ট্রি নেই।</div></td></tr>`}</tbody>
+          </table>
+        </div>
+      </main>
+      <footer class="app-footer-bar no-print">@PreparedBy: AMShahed — 01605721296</footer>
+    </div>`;
+}
+function printMyCollections() {
+  const customer = DATA.customers.find((c) => c.id === SESSION.id);
+  if (!customer) return;
+  const rows = DATA.collections.filter((c) => c.customerId === customer.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const total = rows.reduce((s, c) => s + c.amount, 0);
+  const trs = rows.map((c) => `<tr><td>${fmtDate(c.date)}</td><td>${esc(c.method)}</td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Collection History — " + customer.name, customer.area + " · " + customer.phone)}<table><thead><tr><th>Date</th><th>Method</th><th>Amount</th></tr></thead><tbody>${trs || `<tr><td colspan="3">কোনো এন্ট্রি নেই।</td></tr>`}</tbody></table>${rows.length ? `<div style="text-align:right;font-weight:700;margin-top:10px;">সর্বমোট: ${fmtMoney(total)}</div>` : ""}`);
+}
+
+/* ---------------------------------- Representative self-service portal ---------------------------------- */
+function renderRepPortal() {
+  const rep = DATA.reps.find((r) => r.id === SESSION.id);
+  const root = document.getElementById("root");
+  if (!rep) {
+    root.innerHTML = `<div class="app-loading">⚠️ অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।<br><button class="btn-primary" onclick="doLogout()">Logout</button></div>`;
+    return;
+  }
+  const myDistributions = DATA.distributions.filter((x) => x.repId === rep.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const totalToMe = myDistributions.reduce((s, x) => s + x.repAmount, 0);
+  const totalToCompany = myDistributions.reduce((s, x) => s + x.companyAmount, 0);
+
+  root.innerHTML = `
+    <div class="app-root">
+      <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01991-181158 (Admin)</div>
+      <div class="portal-topbar no-print">
+        <div><h1 class="topbar-title">স্বাগতম, ${esc(rep.name)}</h1><div class="topbar-eyebrow">Representative Portal</div></div>
+        <div>
+          <button class="print-btn" onclick="printMyDistributions()">🖨️ Print</button>
+          <button class="btn-ghost" onclick="doLogout()">🔒 Logout</button>
+        </div>
+      </div>
+      <main class="content" style="max-width:900px;margin:0 auto;">
+        <div class="grid" style="margin-bottom:16px;">
+          <div class="stat-card"><div class="stat-label">আপনাকে বিতরণ করা হয়েছে</div><div class="stat-value tone-success-text">${fmtMoney(totalToMe)}</div></div>
+          <div class="stat-card"><div class="stat-label">কোম্পানীকে পাঠানো হয়েছে</div><div class="stat-value">${fmtMoney(totalToCompany)}</div></div>
+        </div>
+        <div class="panel">
+          <h3 class="panel-title">আপনার ডিস্ট্রিবিউশন হিস্টোরি</h3>
+          <table class="data-table"><thead><tr><th>Date</th><th>Company</th><th>আপনাকে</th><th>কোম্পানীকে</th></tr></thead>
+            <tbody>${myDistributions.length ? myDistributions.map((x) => `<tr><td>${fmtDate(x.date)}</td><td>${esc(idToName(DATA.companies, x.companyId))}</td><td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">কোনো ডিস্ট্রিবিউশন এন্ট্রি নেই।</div></td></tr>`}</tbody>
+          </table>
+        </div>
+      </main>
+      <footer class="app-footer-bar no-print">@PreparedBy: AMShahed — 01605721296</footer>
+    </div>`;
+}
+function printMyDistributions() {
+  const rep = DATA.reps.find((r) => r.id === SESSION.id);
+  if (!rep) return;
+  const rows = DATA.distributions.filter((x) => x.repId === rep.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const totalToMe = rows.reduce((s, x) => s + x.repAmount, 0);
+  const trs = rows.map((x) => `<tr><td>${fmtDate(x.date)}</td><td>${esc(idToName(DATA.companies, x.companyId))}</td><td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td></tr>`).join("");
+  printReceiptHTML(`${printHeader("Distribution History — " + rep.name, rep.area + " · " + rep.phone)}<table><thead><tr><th>Date</th><th>Company</th><th>To You</th><th>To Company</th></tr></thead><tbody>${trs || `<tr><td colspan="4">কোনো এন্ট্রি নেই।</td></tr>`}</tbody></table>${rows.length ? `<div style="text-align:right;font-weight:700;margin-top:10px;">আপনাকে মোট: ${fmtMoney(totalToMe)}</div>` : ""}`);
 }
 
 /* ---------------------------------- render shell ---------------------------------- */
@@ -181,7 +278,7 @@ function render() {
             <div><div class="topbar-eyebrow">Folio ${active.num}</div><h1 class="topbar-title">${active.label}</h1></div>
             <div class="topbar-right"><span class="sync-pill sync-${SYNC_STATE}">${{ idle: "সংযুক্ত", saving: "সেভ হচ্ছে…", saved: "সেভ হয়েছে", error: "সেভ ব্যর্থ" }[SYNC_STATE]}</span></div>
           </header>
-          <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01991-181158 (Admin)</div>
+          <div class="app-header-bar no-print">Emdadul Haque Shaheen — 01813-934246 (ASO)</div>
           <main class="content" id="content"></main>
           <footer class="app-footer-bar no-print">@PreparedBy: AMShahed — 01605721296</footer>
         </div>
@@ -202,76 +299,6 @@ function renderView() {
   else if (VIEW === "distribution") el.innerHTML = viewDistribution();
   else if (VIEW === "ledger") el.innerHTML = viewLedger();
   else if (VIEW === "report") el.innerHTML = viewReport();
-}
-
-/* ---------------------------------- Customer self-service portal ---------------------------------- */
-function renderCustomerPortal() {
-  const customer = DATA.customers.find((c) => c.id === SESSION.id);
-  const root = document.getElementById("root");
-  if (!customer) {
-    root.innerHTML = `<div class="app-loading">⚠️ অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।<br><button class="btn-primary" onclick="doLogout()">Logout</button></div>`;
-    return;
-  }
-  const myCollections = DATA.collections.filter((c) => c.customerId === customer.id).sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalCollected = myCollections.reduce((s, c) => s + c.amount, 0);
-  const bal = customerBalances()[customer.id] || 0;
-
-  root.innerHTML = `
-    <div class="app-root">
-      <div class="app-header-bar">Emdadul Haque Shaheen — 01991-181158 (Admin)</div>
-      <div class="portal-topbar">
-        <div><h1 class="topbar-title">স্বাগতম, ${esc(customer.name)}</h1><div class="topbar-eyebrow">Customer Portal</div></div>
-        <button class="btn-ghost" onclick="doLogout()">🔒 Logout</button>
-      </div>
-      <main class="content" style="max-width:900px;margin:0 auto;">
-        <div class="grid" style="margin-bottom:16px;">
-          <div class="stat-card"><div class="stat-label">মোট কালেকশন হয়েছে</div><div class="stat-value tone-success-text">${fmtMoney(totalCollected)}</div></div>
-          <div class="stat-card"><div class="stat-label">বর্তমান বকেয়া</div><div class="stat-value tone-danger-text">${fmtMoney(bal)}</div></div>
-        </div>
-        <div class="panel">
-          <h3 class="panel-title">আপনার কালেকশন হিস্টোরি</h3>
-          <table class="data-table"><thead><tr><th>Date</th><th>Method</th><th>Amount</th></tr></thead>
-            <tbody>${myCollections.length ? myCollections.map((c) => `<tr><td>${fmtDate(c.date)}</td><td><span class="badge">${esc(c.method)}</span></td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td></tr>`).join("") : `<tr><td colspan="3"><div class="empty-state">কোনো কালেকশন এন্ট্রি নেই।</div></td></tr>`}</tbody>
-          </table>
-        </div>
-      </main>
-      <footer class="app-footer-bar">@PreparedBy: AMShahed — 01605721296</footer>
-    </div>`;
-}
-
-/* ---------------------------------- Representative self-service portal ---------------------------------- */
-function renderRepPortal() {
-  const rep = DATA.reps.find((r) => r.id === SESSION.id);
-  const root = document.getElementById("root");
-  if (!rep) {
-    root.innerHTML = `<div class="app-loading">⚠️ অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।<br><button class="btn-primary" onclick="doLogout()">Logout</button></div>`;
-    return;
-  }
-  const myDistributions = DATA.distributions.filter((x) => x.repId === rep.id).sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalToMe = myDistributions.reduce((s, x) => s + x.repAmount, 0);
-  const totalToCompany = myDistributions.reduce((s, x) => s + x.companyAmount, 0);
-
-  root.innerHTML = `
-    <div class="app-root">
-      <div class="app-header-bar">Emdadul Haque Shaheen — 01991-181158 (Admin)</div>
-      <div class="portal-topbar">
-        <div><h1 class="topbar-title">স্বাগতম, ${esc(rep.name)}</h1><div class="topbar-eyebrow">Representative Portal</div></div>
-        <button class="btn-ghost" onclick="doLogout()">🔒 Logout</button>
-      </div>
-      <main class="content" style="max-width:900px;margin:0 auto;">
-        <div class="grid" style="margin-bottom:16px;">
-          <div class="stat-card"><div class="stat-label">আপনাকে বিতরণ করা হয়েছে</div><div class="stat-value tone-success-text">${fmtMoney(totalToMe)}</div></div>
-          <div class="stat-card"><div class="stat-label">কোম্পানীকে পাঠানো হয়েছে</div><div class="stat-value">${fmtMoney(totalToCompany)}</div></div>
-        </div>
-        <div class="panel">
-          <h3 class="panel-title">আপনার ডিস্ট্রিবিউশন হিস্টোরি</h3>
-          <table class="data-table"><thead><tr><th>Date</th><th>Company</th><th>আপনাকে</th><th>কোম্পানীকে</th></tr></thead>
-            <tbody>${myDistributions.length ? myDistributions.map((x) => `<tr><td>${fmtDate(x.date)}</td><td>${esc(idToName(DATA.companies, x.companyId))}</td><td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">কোনো ডিস্ট্রিবিউশন এন্ট্রি নেই।</div></td></tr>`}</tbody>
-          </table>
-        </div>
-      </main>
-      <footer class="app-footer-bar">@PreparedBy: AMShahed — 01605721296</footer>
-    </div>`;
 }
 
 /* ---------------------------------- 01 Dashboard ---------------------------------- */
@@ -357,25 +384,24 @@ function viewDashboard() {
 function viewCustomers() {
   const bal = customerBalances();
   return `
-    <div class="toolbar no-print">
+    <div class="toolbar">
       <div class="search-box">🔍 <input placeholder="খুঁজুন..." oninput="filterTable('customersTable', this.value)"></div>
       <button class="btn-primary" onclick="openCustomerModal()">+ Add Customer</button>
       ${printButton("Print Customer List", "printCustomerList")}
     </div>
     <div class="panel">
       <table class="data-table" id="customersTable">
-        <thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Area</th><th>Username</th><th>Balance</th><th class="no-print"></th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Type</th><th>Area</th><th>Balance</th><th></th></tr></thead>
         <tbody>
-          ${DATA.customers.length === 0 ? `<tr><td colspan="7"><div class="empty-state">কোনো কাস্টমার নেই।</div></td></tr>` :
+          ${DATA.customers.length === 0 ? `<tr><td colspan="6"><div class="empty-state">কোনো কাস্টমার নেই।</div></td></tr>` :
             DATA.customers.map((c) => `
               <tr>
                 <td><strong>${esc(c.name)}</strong><div style="font-size:11px;color:var(--muted)">${esc(c.address || "")}</div></td>
                 <td>${esc(c.phone)}</td>
                 <td><span class="badge">${esc(c.type)}</span></td>
                 <td>${esc(c.area)}</td>
-                <td>${esc(c.username || "-")}</td>
                 <td class="mono-num ${(bal[c.id] || 0) > 0 ? "tone-danger-text" : "tone-success-text"}">${fmtMoney(bal[c.id] || 0)}</td>
-                <td class="no-print"><button class="icon-btn" onclick="openCustomerModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCustomer('${c.id}')">🗑️</button></td>
+                <td><button class="icon-btn" onclick="openCustomerModal('${c.id}')">✏️</button><button class="icon-btn" onclick="deleteCustomer('${c.id}')">🗑️</button></td>
               </tr>`).join("")}
         </tbody>
       </table>
@@ -399,19 +425,15 @@ function openCustomerModal(id) {
       <label class="field-label" style="margin-top:10px;">Address</label><input class="field-input" id="f_address" value="${esc(c ? c.address : "")}">
       <label class="field-label" style="margin-top:10px;">Opening Balance</label><input class="field-input" type="number" id="f_opening" value="${c ? c.opening : 0}">
       <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
-        <label class="field-label">Portal Username (কাস্টমার লগইন)</label><input class="field-input" id="f_username" value="${esc(c ? c.username : "")}">
-        <label class="field-label" style="margin-top:10px;">Portal Password</label><input class="field-input" id="f_password" value="${esc(c ? c.password : "")}">
+        <label class="field-label">Portal Password (লগইন — নাম দিয়েই ইউজার আইডি হবে)</label>
+        <input class="field-input" id="f_password" value="${esc(c ? c.password : "")}" placeholder="পাসওয়ার্ড দিন">
       </div>
       <div class="modal-actions"><button class="btn-ghost" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveCustomer('${id || ""}')">Save</button></div>
     </div>`);
 }
 function saveCustomer(id) {
-  const payload = { name: val("f_name"), phone: val("f_phone"), type: val("f_type"), area: val("f_area"), address: val("f_address"), opening: Number(val("f_opening")) || 0, username: val("f_username").trim(), password: val("f_password") };
+  const payload = { name: val("f_name"), phone: val("f_phone"), type: val("f_type"), area: val("f_area"), address: val("f_address"), opening: Number(val("f_opening")) || 0, password: val("f_password") };
   if (!payload.name || !payload.phone) return alert("Name এবং Phone আবশ্যক।");
-  if (payload.username) {
-    const clash = DATA.customers.find((x) => x.username === payload.username && x.id !== id);
-    if (clash) return alert("এই Username ইতিমধ্যে ব্যবহৃত হয়েছে।");
-  }
   if (id) Object.assign(DATA.customers.find((x) => x.id === id), payload);
   else DATA.customers.push({ id: genId("c"), ...payload });
   closeModal(); persist();
@@ -426,7 +448,7 @@ function deleteCustomer(id) {
 /* ---------------------------------- 03 Products ---------------------------------- */
 function viewProducts() {
   return `
-    <div class="toolbar no-print">
+    <div class="toolbar">
       <div class="search-box">🔍 <input placeholder="খুঁজুন..." oninput="filterTable('productsTable', this.value)"></div>
       <div><button class="btn-ghost" onclick="openCompanyModal()">+ Add Company</button> <button class="btn-primary" onclick="openProductModal()" ${!DATA.companies.length ? "disabled" : ""}>+ Add Product</button> ${printButton("Print Product List", "printProductList")}</div>
     </div>
@@ -525,26 +547,26 @@ function deleteProduct(id) {
 function viewReps() {
   const payables = repPayables();
   return `
-    <div class="toolbar no-print">
+    <div class="toolbar">
       <div class="search-box">🔍 <input placeholder="খুঁজুন..." oninput="filterTable('repsTable', this.value)"></div>
       <div><button class="btn-ghost" onclick="openDeliveryModal()" ${!DATA.customers.length || !DATA.reps.length || !DATA.products.length ? "disabled" : ""}>+ Record Delivery</button> <button class="btn-primary" onclick="openRepModal()">+ Add Representative</button> ${printButton("Print Rep List", "printRepList")}</div>
     </div>
     <div class="panel">
       <table class="data-table" id="repsTable">
-        <thead><tr><th>Name</th><th>Phone</th><th>Area</th><th>Username</th><th>Collected</th><th>Delivered</th><th>Payable</th><th class="no-print"></th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Area</th><th>Collected</th><th>Delivered</th><th>Payable</th><th class="no-print"></th></tr></thead>
         <tbody>
-          ${DATA.reps.length === 0 ? `<tr><td colspan="8"><div class="empty-state">কোনো প্রতিনিধি নেই।</div></td></tr>` :
+          ${DATA.reps.length === 0 ? `<tr><td colspan="7"><div class="empty-state">কোনো প্রতিনিধি নেই।</div></td></tr>` :
             DATA.reps.map((r) => {
               const collected = DATA.collections.filter((c) => c.repId === r.id).reduce((s, c) => s + c.amount, 0);
               const delivered = DATA.deliveries.filter((d) => d.repId === r.id).reduce((s, d) => s + d.total, 0);
               return `<tr onclick="toggleRepLog('${r.id}')" style="cursor:pointer;">
-                <td><strong>${esc(r.name)}</strong></td><td>${esc(r.phone)}</td><td>${esc(r.area)}</td><td>${esc(r.username || "-")}</td>
+                <td><strong>${esc(r.name)}</strong></td><td>${esc(r.phone)}</td><td>${esc(r.area)}</td>
                 <td class="mono-num tone-success-text">${fmtMoney(collected)}</td>
                 <td class="mono-num tone-gold-text">${fmtMoney(delivered)}</td>
                 <td class="mono-num tone-danger-text">${fmtMoney(payables[r.id] || 0)}</td>
                 <td class="no-print" onclick="event.stopPropagation()"><button class="icon-btn" onclick="openRepModal('${r.id}')">✏️</button><button class="icon-btn" onclick="deleteRep('${r.id}')">🗑️</button></td>
               </tr>
-              <tr id="log_${r.id}" style="display:none;"><td colspan="8" style="background:#FAFBFC;">
+              <tr id="log_${r.id}" style="display:none;"><td colspan="7" style="background:#FAFBFC;">
                 ${deliveryLogTable(r.id)}
               </td></tr>`;
             }).join("")}
@@ -581,12 +603,12 @@ function printSingleDelivery(id) {
   const html = `
     <h2 style="margin:0 0 4px;">Delivery Receipt</h2>
     <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
-    <table><tbody>
+    <table class="data-table"><tbody>
       <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(d.date))}</td></tr>
       <tr><td><strong>Customer</strong></td><td>${esc(idToName(DATA.customers, d.customerId))}</td></tr>
       <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, d.repId))}</td></tr>
     </tbody></table>
-    <table style="margin-top:12px;"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Line Total</th></tr></thead>
+    <table class="data-table" style="margin-top:12px;"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Line Total</th></tr></thead>
       <tbody>${d.items.map((it) => `<tr><td>${esc(idToName(DATA.products, it.productId))}</td><td class="mono-num">${it.qty}</td><td class="mono-num">${fmtMoney(it.price)}</td><td class="mono-num">${fmtMoney(it.qty * it.price)}</td></tr>`).join("")}</tbody>
     </table>
     <div style="text-align:right;margin-top:10px;font-weight:700;">Total: <span class="mono-num tone-gold-text" style="font-size:16px;">${fmtMoney(d.total)}</span></div>`;
@@ -600,19 +622,15 @@ function openRepModal(id) {
       <label class="field-label" style="margin-top:10px;">Phone</label><input class="field-input" id="f_rphone" value="${esc(r ? r.phone : "")}">
       <label class="field-label" style="margin-top:10px;">Area</label><select class="field-input" id="f_rarea">${AREAS.map((a) => `<option ${r && r.area === a ? "selected" : ""}>${a}</option>`).join("")}</select>
       <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
-        <label class="field-label">Portal Username (প্রতিনিধি লগইন)</label><input class="field-input" id="f_rusername" value="${esc(r ? r.username : "")}">
-        <label class="field-label" style="margin-top:10px;">Portal Password</label><input class="field-input" id="f_rpassword" value="${esc(r ? r.password : "")}">
+        <label class="field-label">Portal Password (লগইন — নাম দিয়েই ইউজার আইডি হবে)</label>
+        <input class="field-input" id="f_rpassword" value="${esc(r ? r.password : "")}" placeholder="পাসওয়ার্ড দিন">
       </div>
       <div class="modal-actions"><button class="btn-ghost" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveRep('${id || ""}')">Save</button></div>
     </div>`);
 }
 function saveRep(id) {
-  const payload = { name: val("f_rname"), phone: val("f_rphone"), area: val("f_rarea"), username: val("f_rusername").trim(), password: val("f_rpassword") };
+  const payload = { name: val("f_rname"), phone: val("f_rphone"), area: val("f_rarea"), password: val("f_rpassword") };
   if (!payload.name) return alert("Name আবশ্যক।");
-  if (payload.username) {
-    const clash = DATA.reps.find((x) => x.username === payload.username && x.id !== id);
-    if (clash) return alert("এই Username ইতিমধ্যে ব্যবহৃত হয়েছে।");
-  }
   if (id) Object.assign(DATA.reps.find((x) => x.id === id), payload);
   else DATA.reps.push({ id: genId("r"), ...payload });
   closeModal(); persist();
@@ -633,7 +651,7 @@ function openDeliveryModal(id) {
       <label class="field-label" style="margin-top:10px;">Representative</label><select class="field-input" id="f_drep">${DATA.reps.map((r) => `<option value="${r.id}" ${d && d.repId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
       <label class="field-label" style="margin-top:14px;">Product Lines</label>
       <div id="itemBuilder">${renderItemRows()}</div>
-      <button type="button" class="btn-ghost" style="margin-top:6px;font-size:12px;" onclick="addItemRow()">+ Add line</button>
+      <button class="btn-ghost" style="margin-top:6px;font-size:12px;" onclick="addItemRow()">+ Add line</button>
       <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);font-weight:700;">
         <span>Total</span><span class="mono-num tone-gold-text" id="deliveryTotal">${fmtMoney(itemsTotal())}</span>
       </div>
@@ -689,13 +707,13 @@ function deleteDelivery(id) {
 }
 
 /* ---------------------------------- 05 Collection ---------------------------------- */
-let COLLECTION_VIEW_MODE = "grouped";
+let COLLECTION_VIEW_MODE = "grouped"; // grouped | flat
 function viewCollection() {
   const rows = [...DATA.collections].sort((a, b) => (a.date < b.date ? 1 : -1));
   const total = rows.reduce((s, r) => s + r.amount, 0);
   const groups = groupByDate(rows);
   return `
-    <div class="toolbar no-print"><div style="font-size:12.5px;color:var(--muted);">Admin কাস্টমার থেকে টাকা কালেকশন করবে। একই দিনের একাধিক এন্ট্রি একসাথে গ্রুপ হয়ে দেখাবে।</div>
+    <div class="toolbar"><div style="font-size:12.5px;color:var(--muted);">Admin কাস্টমার থেকে টাকা কালেকশন করবে। একই দিনের একাধিক এন্ট্রি একসাথে গ্রুপ হয়ে দেখাবে।</div>
       <div>
         <button class="btn-ghost" onclick="COLLECTION_VIEW_MODE = COLLECTION_VIEW_MODE==='grouped'?'flat':'grouped'; renderView();">${COLLECTION_VIEW_MODE === "grouped" ? "🔀 Flat View" : "📅 Grouped View"}</button>
         <button class="btn-primary" onclick="openCollectionModal()" ${!DATA.customers.length || !DATA.reps.length ? "disabled" : ""}>+ Record Collection</button>
@@ -707,6 +725,17 @@ function viewCollection() {
         COLLECTION_VIEW_MODE === "grouped" ? groups.map((g) => collectionGroupBlock(g)).join("") : collectionFlatTable(rows)}
       ${rows.length ? `<div style="text-align:right;font-weight:700;margin-top:10px;">সর্বমোট: <span class="mono-num tone-success-text">${fmtMoney(total)}</span></div>` : ""}
     </div>`;
+}
+function printAllCollections() {
+  const rows = [...DATA.collections].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const groups = groupByDate(rows);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const body = groups.map((g) => {
+    const dayTotal = g.rows.reduce((s, r) => s + r.amount, 0);
+    const trs = g.rows.map((c) => `<tr><td>${esc(idToName(DATA.customers, c.customerId))}</td><td>${esc(idToName(DATA.reps, c.repId))}</td><td>${esc(c.method)}</td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td></tr>`).join("");
+    return `<div class="group-block"><div class="group-head"><span>${fmtDate(g.date)}</span><span>${fmtMoney(dayTotal)}</span></div><table><thead><tr><th>Customer</th><th>Rep</th><th>Method</th><th>Amount</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  }).join("");
+  printReceiptHTML(`${printHeader("Collection Receipt", "Collection & Distribution Manager")}${body || "<p>কোনো কালেকশন নেই।</p>"}${rows.length ? `<div style="text-align:right;font-weight:700;margin-top:10px;">সর্বমোট: ${fmtMoney(total)}</div>` : ""}`);
 }
 function collectionFlatTable(rows) {
   return `<table class="data-table" id="collectionTable">
@@ -733,7 +762,7 @@ function printSingleCollection(id) {
   const html = `
     <h2 style="margin:0 0 4px;">Collection Receipt</h2>
     <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
-    <table><tbody>
+    <table class="data-table"><tbody>
       <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(c.date))}</td></tr>
       <tr><td><strong>Customer</strong></td><td>${esc(idToName(DATA.customers, c.customerId))}</td></tr>
       <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, c.repId))}</td></tr>
@@ -742,17 +771,6 @@ function printSingleCollection(id) {
       ${c.note ? `<tr><td><strong>Note</strong></td><td>${esc(c.note)}</td></tr>` : ""}
     </tbody></table>`;
   printReceiptHTML(html);
-}
-function printAllCollections() {
-  const rows = [...DATA.collections].sort((a, b) => (a.date < b.date ? 1 : -1));
-  const groups = groupByDate(rows);
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-  const body = groups.map((g) => {
-    const dayTotal = g.rows.reduce((s, r) => s + r.amount, 0);
-    const trs = g.rows.map((c) => `<tr><td>${esc(idToName(DATA.customers, c.customerId))}</td><td>${esc(idToName(DATA.reps, c.repId))}</td><td>${esc(c.method)}</td><td class="mono-num tone-success-text">${fmtMoney(c.amount)}</td></tr>`).join("");
-    return `<div class="group-block"><div class="group-head"><span>${fmtDate(g.date)}</span><span>${fmtMoney(dayTotal)}</span></div><table><thead><tr><th>Customer</th><th>Rep</th><th>Method</th><th>Amount</th></tr></thead><tbody>${trs}</tbody></table></div>`;
-  }).join("");
-  printReceiptHTML(`${printHeader("Collection Receipt", "Collection & Distribution Manager")}${body || "<p>কোনো কালেকশন নেই।</p>"}${rows.length ? `<div style="text-align:right;font-weight:700;margin-top:10px;">সর্বমোট: ${fmtMoney(total)}</div>` : ""}`);
 }
 function openCollectionModal(id) {
   const c = id ? DATA.collections.find((x) => x.id === id) : null;
@@ -786,7 +804,7 @@ function viewDistribution() {
   const rows = [...DATA.distributions].sort((a, b) => (a.date < b.date ? 1 : -1));
   const groups = groupByDate(rows);
   return `
-    <div class="toolbar no-print"><div style="font-size:12.5px;color:var(--muted);">Admin কালেকশন করা টাকা প্রতিনিধি ও কোম্পানীকে ভাগ করে দেবে। একই দিনের একাধিক এন্ট্রি একসাথে দেখাবে।</div>
+    <div class="toolbar"><div style="font-size:12.5px;color:var(--muted);">Admin কালেকশন করা টাকা প্রতিনিধি ও কোম্পানীকে ভাগ করে দেবে। একই দিনের একাধিক এন্ট্রি একসাথে দেখাবে।</div>
       <div>
         <button class="btn-ghost" onclick="DISTRIBUTION_VIEW_MODE = DISTRIBUTION_VIEW_MODE==='grouped'?'flat':'grouped'; renderView();">${DISTRIBUTION_VIEW_MODE === "grouped" ? "🔀 Flat View" : "📅 Grouped View"}</button>
         <button class="btn-primary" onclick="openDistributionModal()" ${!DATA.reps.length || !DATA.companies.length ? "disabled" : ""}>+ Record Distribution</button>
@@ -803,9 +821,18 @@ function viewDistribution() {
         DISTRIBUTION_VIEW_MODE === "grouped" ? groups.map((g) => distributionGroupBlock(g)).join("") : distributionFlatTable(rows)}
     </div>`;
 }
+function printAllDistributions() {
+  const rows = [...DATA.distributions].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const groups = groupByDate(rows);
+  const body = groups.map((g) => {
+    const dayTotal = g.rows.reduce((s, r) => s + r.repAmount + r.companyAmount, 0);
+    const trs = g.rows.map((x) => `<tr><td>${esc(idToName(DATA.reps, x.repId))}</td><td>${esc(idToName(DATA.companies, x.companyId))}</td><td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td></tr>`).join("");
+    return `<div class="group-block"><div class="group-head"><span>${fmtDate(g.date)}</span><span>${fmtMoney(dayTotal)}</span></div><table><thead><tr><th>Rep</th><th>Company</th><th>To Rep</th><th>To Company</th></tr></thead><tbody>${trs}</tbody></table></div>`;
+  }).join("");
+  printReceiptHTML(`${printHeader("Distribution Receipt", "Collection & Distribution Manager")}${body || "<p>কোনো ডিস্ট্রিবিউশন নেই।</p>"}`);
+}
 function distributionFlatTable(rows) {
-  return `<table class="data-table" id="distributionTable">
-    <thead><tr><th>Date</th><th>Rep</th><th>Company</th><th>To Rep</th><th>To Company</th><th>Total</th><th class="no-print"></th></tr></thead>
+  return `<table class="data-table" id="distributionTable">    <thead><tr><th>Date</th><th>Rep</th><th>Company</th><th>To Rep</th><th>To Company</th><th>Total</th><th class="no-print"></th></tr></thead>
     <tbody>${rows.map((x) => `<tr><td>${fmtDate(x.date)}</td><td><strong>${esc(idToName(DATA.reps, x.repId))}</strong></td><td>${esc(idToName(DATA.companies, x.companyId))}</td>
       <td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td><td class="mono-num tone-gold-text">${fmtMoney(x.repAmount + x.companyAmount)}</td>
       <td class="no-print"><button class="icon-btn" onclick="openDistributionModal('${x.id}')">✏️</button><button class="icon-btn" onclick="deleteDistribution('${x.id}')">🗑️</button><button class="icon-btn" onclick="printSingleDistribution('${x.id}')" title="Print Receipt">🖨️</button></td></tr>`).join("")}</tbody>
@@ -828,7 +855,7 @@ function printSingleDistribution(id) {
   const html = `
     <h2 style="margin:0 0 4px;">Distribution Receipt</h2>
     <div style="font-size:12px;color:#6B7785;margin-bottom:16px;">Printed on ${esc(fmtDate(todayStr()))}</div>
-    <table><tbody>
+    <table class="data-table"><tbody>
       <tr><td style="width:160px;"><strong>Date</strong></td><td>${esc(fmtDate(x.date))}</td></tr>
       <tr><td><strong>Representative</strong></td><td>${esc(idToName(DATA.reps, x.repId))}</td></tr>
       <tr><td><strong>Company</strong></td><td>${esc(idToName(DATA.companies, x.companyId))}</td></tr>
@@ -838,16 +865,6 @@ function printSingleDistribution(id) {
       ${x.note ? `<tr><td><strong>Note</strong></td><td>${esc(x.note)}</td></tr>` : ""}
     </tbody></table>`;
   printReceiptHTML(html);
-}
-function printAllDistributions() {
-  const rows = [...DATA.distributions].sort((a, b) => (a.date < b.date ? 1 : -1));
-  const groups = groupByDate(rows);
-  const body = groups.map((g) => {
-    const dayTotal = g.rows.reduce((s, r) => s + r.repAmount + r.companyAmount, 0);
-    const trs = g.rows.map((x) => `<tr><td>${esc(idToName(DATA.reps, x.repId))}</td><td>${esc(idToName(DATA.companies, x.companyId))}</td><td class="mono-num tone-success-text">${fmtMoney(x.repAmount)}</td><td class="mono-num">${fmtMoney(x.companyAmount)}</td></tr>`).join("");
-    return `<div class="group-block"><div class="group-head"><span>${fmtDate(g.date)}</span><span>${fmtMoney(dayTotal)}</span></div><table><thead><tr><th>Rep</th><th>Company</th><th>To Rep</th><th>To Company</th></tr></thead><tbody>${trs}</tbody></table></div>`;
-  }).join("");
-  printReceiptHTML(`${printHeader("Distribution Receipt", "Collection & Distribution Manager")}${body || "<p>কোনো ডিস্ট্রিবিউশন নেই।</p>"}`);
 }
 function openDistributionModal(id) {
   const x = id ? DATA.distributions.find((v) => v.id === id) : null;
@@ -880,7 +897,7 @@ function viewLedger() {
   if (!LEDGER_CUSTOMER && DATA.customers[0]) LEDGER_CUSTOMER = DATA.customers[0].id;
   if (!LEDGER_REP && DATA.reps[0]) LEDGER_REP = DATA.reps[0].id;
   return `
-    <div class="tabs no-print">
+    <div class="tabs">
       <button class="tab-btn ${LEDGER_TAB === "customer" ? "tab-active" : ""}" onclick="LEDGER_TAB='customer';renderView();">Customer Ledger</button>
       <button class="tab-btn ${LEDGER_TAB === "rep" ? "tab-active" : ""}" onclick="LEDGER_TAB='rep';renderView();">Representative Ledger</button>
     </div>
@@ -897,11 +914,11 @@ function customerLedgerHTML() {
   const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: bal, opening: true }];
   rows.forEach((r) => { bal = bal + r.debit - r.credit; withBal.push({ ...r, balance: bal }); });
   return `
-    <select class="field-input no-print" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_CUSTOMER=this.value;renderView();">
+    <select class="field-input" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_CUSTOMER=this.value;renderView();">
       ${DATA.customers.map((c) => `<option value="${c.id}" ${c.id === customer.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}
     </select>
     <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;" class="no-print">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3 class="panel-title">Ledger — ${esc(customer.name)}</h3>
         ${printButton("Print Ledger", "printCustomerLedger")}
       </div>
@@ -936,11 +953,11 @@ function repLedgerHTML() {
   const withBal = [{ date: "", type: "Opening balance", debit: 0, credit: 0, balance: 0, opening: true }];
   rows.forEach((r) => { bal = bal + r.credit - r.debit; withBal.push({ ...r, balance: bal }); });
   return `
-    <select class="field-input no-print" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_REP=this.value;renderView();">
+    <select class="field-input" style="max-width:280px;margin-bottom:14px;" onchange="LEDGER_REP=this.value;renderView();">
       ${DATA.reps.map((r) => `<option value="${r.id}" ${r.id === rep.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
     </select>
     <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;" class="no-print">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3 class="panel-title">Ledger — ${esc(rep.name)}</h3>
         ${printButton("Print Ledger", "printRepLedger")}
       </div>
@@ -969,7 +986,7 @@ function printRepLedger() {
 let REPORT_TAB = "daily", REPORT_DAY = todayStr(), REPORT_MONTH = todayStr().slice(0, 7), REPORT_YEAR = todayStr().slice(0, 4);
 function viewReport() {
   return `
-    <div class="toolbar no-print">
+    <div class="toolbar">
       <div class="tabs" style="margin-bottom:0;border-bottom:none;">
         <button class="tab-btn ${REPORT_TAB === "daily" ? "tab-active" : ""}" onclick="REPORT_TAB='daily';renderView();">Daily</button>
         <button class="tab-btn ${REPORT_TAB === "monthly" ? "tab-active" : ""}" onclick="REPORT_TAB='monthly';renderView();">Monthly</button>
@@ -1047,7 +1064,7 @@ function reportMonthly() {
     </div>
     <div class="panel"><h3 class="panel-title">${monthLabel(REPORT_MONTH)} — দৈনিক বিভাজন</h3>
       <table class="data-table"><thead><tr><th>Day</th><th>Collection</th><th>Delivery</th><th>Distributed</th></tr></thead><tbody>
-        ${rows.map((r) => `<tr><td>${r.d}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("")}
+        ${rows.length ? rows.map((r) => `<tr><td>${r.d}</td><td class="mono-num tone-success-text">${fmtMoney(r.col)}</td><td class="mono-num tone-gold-text">${fmtMoney(r.del)}</td><td class="mono-num">${fmtMoney(r.dist)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">এই মাসে কিছু নেই।</div></td></tr>`}
       </tbody></table>
     </div>`;
 }
@@ -1103,6 +1120,9 @@ function printYearlyReport() {
 }
 
 /* ---------------------------------- print helper (data-driven, no DOM cloning) ---------------------------------- */
+// Every print button calls a dedicated function that rebuilds a clean data-only table
+// directly from DATA, then renders it into a hidden isolated iframe. Nothing from the
+// live page (buttons, toolbars, forms) is ever printed.
 function printButton(label, fn) {
   return `<button class="print-btn no-print" onclick="${fn}()">🖨️ ${label || "Print"}</button>`;
 }
@@ -1118,8 +1138,14 @@ function groupByDate(rows) {
   return Object.keys(map).sort((a, b) => (a < b ? 1 : -1)).map((date) => ({ date, rows: map[date] }));
 }
 
-const PRINT_HEADER_HTML = `<div class="receipt-print-header"><strong>Emdadul Haque Shaheen</strong> — 01991-181158 (Admin)</div>`;
-const PRINT_FOOTER_HTML = `<div class="receipt-print-footer">@PreparedBy: AMShahed — 01605721296</div>`;
+const PRINT_HEADER_HTML = `
+  <div class="receipt-print-header">
+    <strong>Emdadul Haque Shaheen</strong> — 01991-181158 (Admin)
+  </div>`;
+const PRINT_FOOTER_HTML = `
+  <div class="receipt-print-footer">
+    @PreparedBy: AMShahed — 01605721296
+  </div>`;
 
 function printReceiptHTML(innerHtml) {
   const existing = document.getElementById("printFrame");
@@ -1151,7 +1177,6 @@ function printReceiptHTML(innerHtml) {
       .receipt-print-header{border-bottom:2px solid #14293D;padding-bottom:8px;margin-bottom:16px;font-size:13px;}
       .receipt-print-footer{border-top:1px solid #E3E7EA;margin-top:24px;padding-top:8px;font-size:11px;color:#6B7785;text-align:center;}
       h2{font-size:17px;margin:0 0 4px;}
-      h3{font-size:14px;margin:16px 0 6px;}
       @page{margin:14mm;}
     </style>
     </head><body>
@@ -1202,27 +1227,27 @@ function updateSyncPill() {
 }
 
 /* ---------------------------------- boot ---------------------------------- */
-function bootApp() {
-  if (typeof isConfigured === "function" && isConfigured()) {
-    loadData().then((remote) => { DATA = normalizeAllDates(remote); render(); }).catch((e) => {
-      document.getElementById("root").innerHTML = `<div class="app-loading">⚠️ লোড ব্যর্থ: ${esc(e.message)}<br><button class="btn-primary" onclick="location.reload()">আবার চেষ্টা করুন</button></div>`;
-    });
-  } else {
-    DATA = normalizeAllDates(seedData());
-    render();
-  }
+function loadInitialDataThenRoute() {
+  document.getElementById("root").innerHTML = `<div class="app-loading"><span class="spin">⏳</span><span>লোড হচ্ছে…</span></div>`;
+  const loader = (typeof isConfigured === "function" && isConfigured()) ? loadData() : Promise.resolve(seedData());
+  loader.then((remote) => {
+    DATA = normalizeAllDates(remote);
+    const raw = sessionStorage.getItem("cdm_session");
+    if (raw) {
+      try {
+        const s = JSON.parse(raw);
+        if (s.role === "admin") { SESSION = s; render(); return; }
+        if (s.role === "customer" && DATA.customers.find((c) => c.id === s.id)) { SESSION = s; render(); return; }
+        if (s.role === "rep" && DATA.reps.find((r) => r.id === s.id)) { SESSION = s; render(); return; }
+      } catch (e) { /* fall through to login */ }
+    }
+    SESSION = null;
+    if (typeof ADMIN_PASSWORD !== "string" || !ADMIN_PASSWORD) { SESSION = { role: "admin", id: null }; render(); return; }
+    renderLogin();
+  }).catch((e) => {
+    document.getElementById("root").innerHTML = `<div class="app-loading">⚠️ লোড ব্যর্থ: ${esc(e.message)}<br><button class="btn-primary" onclick="loadInitialDataThenRoute()">আবার চেষ্টা করুন</button></div>`;
+  });
 }
 (function init() {
-  const raw = sessionStorage.getItem("cdm_session");
-  if (raw) {
-    try {
-      SESSION = JSON.parse(raw);
-      if (SESSION.role === "admin") { bootApp(); return; }
-      // customer/rep sessions need fresh data reload since we don't persist DATA locally
-      loadData().then((remote) => { DATA = normalizeAllDates(remote); render(); }).catch(() => renderLogin("সেশন পুনরায় লোড করতে ব্যর্থ, আবার লগইন করুন।"));
-      return;
-    } catch (e) { SESSION = null; }
-  }
-  if (typeof ADMIN_PASSWORD !== "string" || !ADMIN_PASSWORD) { SESSION = { role: "admin", id: null }; bootApp(); return; }
-  renderLogin();
+  loadInitialDataThenRoute();
 })();

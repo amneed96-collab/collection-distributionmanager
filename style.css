@@ -21,7 +21,7 @@ body{margin:0; background:var(--paper); color:var(--text); font-family:Arial,san
 .nav-active{background:var(--ink-2); color:#fff;}
 .nav-num{font-family:monospace; font-size:11px; color:#6F8399; width:18px; display:inline-block;}
 .main-col{flex:1; min-width:0; display:flex; flex-direction:column;}
-.app-header-bar{background:var(--ink); color:#EAF0F5; font-size:12px; padding:6px 24px;}
+.app-header-bar{background:var(--ink); color:#EAF0F5; font-size:12px; padding:10px 24px; text-align:center; font-weight: 700;}
 .app-footer-bar{background:var(--card); color:var(--muted); font-size:11.5px; padding:10px 24px; border-top:1px solid var(--border); text-align:center;}
 .topbar{display:flex; align-items:center; gap:14px; padding:16px 24px; background:var(--card); border-bottom:1px solid var(--border);}
 .topbar-eyebrow{font-family:monospace; font-size:11px; color:var(--gold); text-transform:uppercase;}
@@ -87,16 +87,12 @@ body{margin:0; background:var(--paper); color:var(--text); font-family:Arial,san
 .login-card h2{margin:0 0 4px; font-size:18px;}
 .login-card p{color:var(--muted); font-size:12.5px; margin:0 0 18px;}
 .login-error{color:var(--danger); font-size:12.5px; margin-top:8px;}
+.portal-topbar{display:flex; justify-content:space-between; align-items:center; padding:16px 24px; background:var(--card); border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px;}
+.portal-topbar > div:last-child{display:flex; gap:8px;}
 
 .group-block{border:1px solid var(--border); border-radius:10px; margin-bottom:12px; overflow:hidden;}
 .group-head{display:flex; justify-content:space-between; align-items:center; background:#FAFBFC; padding:10px 14px; font-size:13px; font-weight:700; cursor:pointer;}
 .group-head .g-total{font-family:monospace; color:var(--success);}
-
-
-.role-tabs{display:flex;gap:4px;margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
-.role-tab{flex:1;background:#fff;border:none;padding:8px;font-size:12.5px;cursor:pointer;color:var(--muted);}
-.role-tab.role-active{background:var(--ink);color:#fff;}
-.portal-topbar{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:var(--card);border-bottom:1px solid var(--border);}
 
 /* print-only elements stay visible on screen (they show the report/receipt title inline);
    actual printing happens in an isolated iframe built by printReceiptHTML(), so no
